@@ -11,7 +11,7 @@ const app = {
     textColor: "#00ff00",
     bgColor: "#000000",
     expandedHeight: 300,
-    maxLogLines: 200, // Reduced for performance
+    maxLogLines: 350, // Default max log lines
   },
 
   // Initialize the app
@@ -1105,7 +1105,7 @@ const app = {
   loadLogSettings() {
     const saved = localStorage.getItem("logSettings");
     if (saved) {
-      this.logSettings = JSON.parse(saved);
+      this.logSettings = { ...this.logSettings, ...JSON.parse(saved) };
     }
 
     // Update UI controls
@@ -1122,6 +1122,13 @@ const app = {
     const logHeightValue = document.getElementById("log-height-value");
     if (logHeightValue)
       logHeightValue.textContent = this.logSettings.expandedHeight + "px";
+
+    const maxLinesInput = document.getElementById("log-max-lines");
+    if (maxLinesInput) maxLinesInput.value = this.logSettings.maxLogLines;
+
+    const maxLinesValue = document.getElementById("max-lines-value");
+    if (maxLinesValue)
+      maxLinesValue.textContent = this.logSettings.maxLogLines;
 
     const fontFamilyInput = document.getElementById("log-font-family");
     if (fontFamilyInput) fontFamilyInput.value = this.logSettings.fontFamily;
@@ -1146,11 +1153,16 @@ const app = {
     this.logSettings.expandedHeight = parseInt(
       document.getElementById("log-height").value
     );
+    this.logSettings.maxLogLines = parseInt(
+      document.getElementById("log-max-lines").value
+    );
 
     document.getElementById("font-size-value").textContent =
       this.logSettings.fontSize + "px";
     document.getElementById("log-height-value").textContent =
       this.logSettings.expandedHeight + "px";
+    document.getElementById("max-lines-value").textContent =
+      this.logSettings.maxLogLines;
 
     // Save to localStorage
     localStorage.setItem("logSettings", JSON.stringify(this.logSettings));
@@ -1182,6 +1194,7 @@ const app = {
       textColor: "#00ff00",
       bgColor: "#000000",
       expandedHeight: 300,
+      maxLogLines: 350,
     };
 
     localStorage.setItem("logSettings", JSON.stringify(this.logSettings));
@@ -1190,6 +1203,12 @@ const app = {
     document.getElementById("log-font-size").value = this.logSettings.fontSize;
     document.getElementById("font-size-value").textContent =
       this.logSettings.fontSize + "px";
+    document.getElementById("log-height").value = this.logSettings.expandedHeight;
+    document.getElementById("log-height-value").textContent =
+      this.logSettings.expandedHeight + "px";
+    document.getElementById("log-max-lines").value = this.logSettings.maxLogLines;
+    document.getElementById("max-lines-value").textContent =
+      this.logSettings.maxLogLines;
     document.getElementById("log-font-family").value =
       this.logSettings.fontFamily;
     document.getElementById("log-text-color").value =
@@ -1198,109 +1217,6 @@ const app = {
 
     // Apply to all log containers
     this.updateLogSettings();
-  },
-
-  // Select parent directory
-  async selectParentDirectory() {
-    const directory = await window.electronAPI.selectDirectory();
-    if (directory) {
-      this.parentDirectory = directory;
-      document.getElementById("parent-directory").value = directory;
-      localStorage.setItem("parentDirectory", directory);
-
-      // Load available folders
-      await this.loadAvailableFolders();
-    }
-  },
-
-  // Load available folders from parent directory
-  async loadAvailableFolders() {
-    if (!this.parentDirectory) return;
-
-    this.availableFolders = await window.electronAPI.getSubfolders(
-      this.parentDirectory
-    );
-    console.log("Available folders:", this.availableFolders);
-
-    // Update all path dropdowns
-    Object.keys(this.services).forEach((id) => {
-      this.updatePathDropdown(id);
-    });
-  },
-
-  // Update path dropdown for a service
-  updatePathDropdown(serviceId) {
-    const select = document.getElementById(`path-select-${serviceId}`);
-    if (!select) return;
-
-    const currentValue = select.value;
-
-    // Clear and rebuild options
-    select.innerHTML = "";
-
-    // Add current value if it exists
-    if (currentValue) {
-      const option = document.createElement("option");
-      option.value = currentValue;
-      option.textContent = currentValue;
-      select.appendChild(option);
-    }
-
-    // Add available folders
-    this.availableFolders.forEach((folder) => {
-      if (folder.path !== currentValue) {
-        const option = document.createElement("option");
-        option.value = folder.path;
-        option.textContent = folder.path;
-        select.appendChild(option);
-      }
-    });
-  },
-
-  // Execute command in service directory
-  async executeCommand(serviceId) {
-    const input = document.getElementById(`command-input-${serviceId}`);
-    const output = document.getElementById(`log-${serviceId}`);
-    const command = input.value.trim();
-
-    if (!command) return;
-
-    output.innerHTML += `\n> ${command}\n`;
-    output.scrollTop = output.scrollHeight;
-
-    const result = await window.electronAPI.executeCommand(serviceId, command);
-
-    if (result.success) {
-      output.innerHTML += result.output + "\n";
-
-      // If it was a git command that might change branch, reload branch info
-      if (command.includes("git checkout") || command.includes("git switch")) {
-        this.loadGitBranch(serviceId);
-      }
-    } else {
-      output.innerHTML += "Error: " + result.output + "\n";
-    }
-
-    input.value = "";
-    output.scrollTop = output.scrollHeight;
-  },
-
-  // Load git branch for a service
-  async loadGitBranch(serviceId) {
-    const branchElement = document.getElementById(`git-branch-${serviceId}`);
-    if (!branchElement) return;
-
-    const branch = await window.electronAPI.getGitBranch(serviceId);
-    branchElement.textContent = branch;
-
-    // Color code the branch
-    if (branch === "main" || branch === "master") {
-      branchElement.className = "text-xs text-blue-400 font-mono";
-    } else if (branch === "N/A") {
-      branchElement.className = "text-xs text-gray-400 font-mono";
-    } else {
-      branchElement.className = "text-xs text-green-400 font-mono";
-    }
   },
 
   // Strip ANSI color codes from log text
