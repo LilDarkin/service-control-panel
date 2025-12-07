@@ -1,0 +1,43 @@
+{
+  "name": "service-panel-pro",
+  "version": "1.0.8",
+  "description": "A modern service control panel for managing multiple microservices",
+  "main": "main.js",
+  "author": "Bon",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^39.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.servicepanel.app",
+    "productName": "Service Panel Pro",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "forceCodeSigning": false
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
