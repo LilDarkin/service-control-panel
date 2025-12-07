@@ -9,6 +9,39 @@ const configPath = path.join(app.getPath("userData"), "services.json");
 const profilesDir = path.join(app.getPath("userData"), "profiles");
 let currentProfile = "default";
 
+// Log throttling to prevent IPC flooding
+const logBuffer = {};
+let logFlushTimer = null;
+
+function sendBufferedLog(id, log) {
+  if (!logBuffer[id]) {
+    logBuffer[id] = [];
+  }
+  logBuffer[id].push(log);
+  
+  // Schedule flush if not already scheduled
+  if (!logFlushTimer) {
+    logFlushTimer = setTimeout(() => {
+      flushLogBuffer();
+      logFlushTimer = null;
+    }, 50); // Flush every 50ms
+  }
+}
+
+function flushLogBuffer() {
+  Object.keys(logBuffer).forEach(id => {
+    const logs = logBuffer[id];
+    if (logs && logs.length > 0 && mainWindow) {
+      // Send combined logs as one message
+      mainWindow.webContents.send("service-log", { 
+        id, 
+        log: logs.join('') 
+      });
+      logBuffer[id] = [];
+    }
+  });
+}
+
 // Ensure profiles directory exists
 if (!fs.existsSync(profilesDir)) {
   fs.mkdirSync(profilesDir, { recursive: true });
@@ -112,11 +145,11 @@ function startService(id) {
     console.log(`Started service ${id}, PID: ${service.process.pid}`);
 
     service.process.stdout.on("data", (data) => {
-      mainWindow.webContents.send("service-log", { id, log: data.toString() });
+      sendBufferedLog(id, data.toString());
     });
 
     service.process.stderr.on("data", (data) => {
-      mainWindow.webContents.send("service-log", { id, log: data.toString() });
+      sendBufferedLog(id, data.toString());
     });
 
     service.process.on("close", (code) => {

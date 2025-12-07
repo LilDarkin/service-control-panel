@@ -4,13 +4,14 @@ const app = {
   expandedService: null,
   parentDirectory: "",
   availableFolders: [],
+  logsVisible: false, // Default: logs hidden for performance
   logSettings: {
     fontSize: 12,
     fontFamily: "'JetBrains Mono', monospace",
     textColor: "#00ff00",
     bgColor: "#000000",
     expandedHeight: 300,
-    maxLogLines: 500,
+    maxLogLines: 200, // Reduced for performance
   },
 
   // Initialize the app
@@ -241,16 +242,22 @@ const app = {
         </button>
       </div>
 
-      <!-- Git Pull -->
-      <button onclick="app.gitPullService('${service.id}')" class="btn w-full px-2 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-medium flex items-center justify-center gap-1.5 mb-3">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        Git Pull
-      </button>
+      <!-- Git Pull + Toggle Logs -->
+      <div class="flex gap-1.5 mb-3">
+        <button onclick="app.gitPullService('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-medium flex items-center justify-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Git Pull
+        </button>
+        <button onclick="app.toggleServiceLog('${service.id}')" id="toggle-log-btn-${service.id}" class="btn px-2 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-300 hover:text-white rounded text-xs flex items-center gap-1">
+          <span id="toggle-log-icon-${service.id}">${this.logsVisible ? '📋' : '📄'}</span>
+          <span id="toggle-log-text-${service.id}">${this.logsVisible ? 'Hide' : 'Show'}</span>
+        </button>
+      </div>
       
-      <!-- Terminal -->
-      <div class="rounded overflow-hidden border border-dark-700 flex flex-col bg-dark-950" style="height: 200px;" id="terminal-container-${service.id}">
+      <!-- Terminal (hidden by default) -->
+      <div class="rounded overflow-hidden border border-dark-700 flex flex-col bg-dark-950" style="height: 200px; ${this.logsVisible ? '' : 'display: none;'}" id="terminal-container-${service.id}">
         <div class="bg-dark-800 px-2 py-1.5 flex items-center justify-between border-b border-dark-700">
           <div class="flex items-center gap-2">
             <span class="text-[10px] text-dark-500">Branch:</span>
@@ -401,31 +408,66 @@ const app = {
     }
   },
 
-  // Append log to service
+  // Log buffer for throttled updates
+  logBuffer: {},
+  logFlushTimer: null,
+
+  // Append log to service (buffered for performance)
   appendLog(id, log) {
-    const logElement = document.getElementById(`log-${id}`);
-    if (logElement) {
-      const cleanLog = this.stripAnsiCodes(log);
-      const span = document.createElement("span");
-      span.textContent = cleanLog;
-
-      // Check if user is scrolled near bottom before appending
-      const isNearBottom = logElement.scrollHeight - logElement.scrollTop - logElement.clientHeight < 50;
-
-      logElement.appendChild(span);
-
-      // Trim old logs if exceeding max lines
-      this.trimLogIfNeeded(logElement);
-
-      // Only auto-scroll if user was at bottom
-      if (isNearBottom) {
-        logElement.scrollTop = logElement.scrollHeight;
-        this.hideNewLogsIndicator(id);
-      } else {
-        // Show "new logs" indicator
-        this.showNewLogsIndicator(id);
-      }
+    // Buffer the log
+    if (!this.logBuffer[id]) {
+      this.logBuffer[id] = [];
     }
+    this.logBuffer[id].push(log);
+    
+    // Schedule flush if not already scheduled
+    if (!this.logFlushTimer) {
+      this.logFlushTimer = setTimeout(() => {
+        this.flushLogs();
+        this.logFlushTimer = null;
+      }, 100); // Flush every 100ms
+    }
+  },
+
+  // Flush all buffered logs to DOM
+  flushLogs() {
+    requestAnimationFrame(() => {
+      Object.keys(this.logBuffer).forEach(id => {
+        const logs = this.logBuffer[id];
+        if (!logs || logs.length === 0) return;
+        
+        const logElement = document.getElementById(`log-${id}`);
+        const terminal = document.getElementById(`terminal-container-${id}`);
+        
+        // Skip if terminal is hidden (huge performance gain)
+        if (terminal && terminal.style.display === "none") {
+          this.logBuffer[id] = []; // Clear buffer but don't render
+          return;
+        }
+        
+        if (logElement) {
+          // Batch all logs into one text node
+          const combinedLog = logs.map(l => this.stripAnsiCodes(l)).join('');
+          const span = document.createElement("span");
+          span.textContent = combinedLog;
+          
+          const isNearBottom = logElement.scrollHeight - logElement.scrollTop - logElement.clientHeight < 50;
+          
+          logElement.appendChild(span);
+          this.trimLogIfNeeded(logElement);
+          
+          if (isNearBottom) {
+            logElement.scrollTop = logElement.scrollHeight;
+            this.hideNewLogsIndicator(id);
+          } else {
+            this.showNewLogsIndicator(id);
+          }
+        }
+        
+        // Clear buffer for this service
+        this.logBuffer[id] = [];
+      });
+    });
   },
 
   // Trim log container to max lines to prevent memory issues
@@ -589,6 +631,53 @@ const app = {
       this.showNewLogsIndicator(serviceId);
     }
     input.value = "";
+  },
+
+  // Toggle all logs visibility
+  toggleAllLogs() {
+    this.logsVisible = !this.logsVisible;
+    
+    // Update button text
+    const btnText = document.getElementById("toggle-all-logs-text");
+    if (btnText) {
+      btnText.textContent = this.logsVisible ? "Hide All Logs" : "Show All Logs";
+    }
+    
+    // Toggle all service terminals
+    Object.keys(this.services).forEach(id => {
+      const terminal = document.getElementById(`terminal-container-${id}`);
+      const icon = document.getElementById(`toggle-log-icon-${id}`);
+      const text = document.getElementById(`toggle-log-text-${id}`);
+      
+      if (terminal) {
+        terminal.style.display = this.logsVisible ? "flex" : "none";
+      }
+      if (icon) {
+        icon.textContent = this.logsVisible ? "📋" : "📄";
+      }
+      if (text) {
+        text.textContent = this.logsVisible ? "Hide" : "Show";
+      }
+    });
+  },
+
+  // Toggle individual service log visibility
+  toggleServiceLog(id) {
+    const terminal = document.getElementById(`terminal-container-${id}`);
+    const icon = document.getElementById(`toggle-log-icon-${id}`);
+    const text = document.getElementById(`toggle-log-text-${id}`);
+    
+    if (terminal) {
+      const isVisible = terminal.style.display !== "none";
+      terminal.style.display = isVisible ? "none" : "flex";
+      
+      if (icon) {
+        icon.textContent = isVisible ? "📄" : "📋";
+      }
+      if (text) {
+        text.textContent = isVisible ? "Show" : "Hide";
+      }
+    }
   },
 
   // Add new service
