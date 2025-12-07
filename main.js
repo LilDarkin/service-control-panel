@@ -243,7 +243,30 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  // Stop all services
   Object.keys(services).forEach((id) => stopService(id));
+});
+
+app.on("window-all-closed", () => {
+  // Final cleanup for any remaining processes
+  Object.keys(services).forEach((id) => {
+    if (services[id].process) {
+      try {
+        const pid = services[id].process.pid;
+        if (process.platform === "win32") {
+          execSync(`taskkill /F /T /PID ${pid}`, {
+            stdio: "ignore",
+            windowsHide: true,
+          });
+        } else {
+          process.kill(-pid, "SIGKILL");
+        }
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
+  });
+  app.quit();
 });
 
 // IPC Handlers

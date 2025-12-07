@@ -1,0 +1,157 @@
+{
+  "ucmVersion": "1.0.0",
+  "projectName": "service-panel-pro",
+  "projectRoot": "C:\\Projects\\control-panel",
+  "indexedAt": "2025-12-07T03:56:07.660Z",
+  "totalFiles": 3,
+  "totalSymbols": 14,
+  "files": {
+    "renderer.js": {
+      "path": "renderer.js",
+      "extension": ".js",
+      "language": "javascript",
+      "lastModified": 1765079617293.6394,
+      "size": 36559,
+      "symbols": [
+        {
+          "name": "app",
+          "kind": "constant",
+          "line": 2,
+          "exported": false
+        }
+      ],
+      "imports": [],
+      "description": "Application state"
+    },
+    "preload.js": {
+      "path": "preload.js",
+      "extension": ".js",
+      "language": "javascript",
+      "lastModified": 1765079617292.0796,
+      "size": 2470,
+      "symbols": [],
+      "imports": [],
+      "description": "Get all services (returns promise)"
+    },
+    "main.js": {
+      "path": "main.js",
+      "extension": ".js",
+      "language": "javascript",
+      "lastModified": 1765079617292.0796,
+      "size": 15468,
+      "symbols": [
+        {
+          "name": "loadConfig",
+          "kind": "function",
+          "line": 42,
+          "exported": false,
+          "async": false,
+          "params": [
+            "profileName = \"default\""
+          ]
+        },
+        {
+          "name": "saveConfig",
+          "kind": "function",
+          "line": 65,
+          "exported": false,
+          "async": false,
+          "params": [
+            "servicesArray",
+            "profileName = currentProfile",
+            "parentDir = \"\""
+          ]
+        },
+        {
+          "name": "startService",
+          "kind": "function",
+          "line": 79,
+          "exported": false,
+          "async": false,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "stopService",
+          "kind": "function",
+          "line": 165,
+          "exported": false,
+          "async": false,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "restartService",
+          "kind": "function",
+          "line": 191,
+          "exported": false,
+          "async": false,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "path",
+          "kind": "constant",
+          "line": 2,
+          "exported": false
+        },
+        {
+          "name": "fs",
+          "kind": "constant",
+          "line": 3,
+          "exported": false
+        },
+        {
+          "name": "services",
+          "kind": "constant",
+          "line": 7,
+          "exported": false
+        },
+        {
+          "name": "configPath",
+          "kind": "constant",
+          "line": 8,
+          "exported": false
+        },
+        {
+          "name": "profilesDir",
+          "kind": "constant",
+          "line": 9,
+          "exported": false
+        },
+        {
+          "name": "currentProfile",
+          "kind": "constant",
+          "line": 10,
+          "exported": false
+        },
+        {
+          "name": "gitBashPaths",
+          "kind": "constant",
+          "line": 18,
+          "exported": false
+        },
+        {
+          "name": "shellPath",
+          "kind": "constant",
+          "line": 25,
+          "exported": false
+        }
+      ],
+      "imports": []
+    }
+  },
+  "dependencies": [],
+  "entryPoints": [
+    "main.js"
+  ],
+  "languageStats": {
+    "javascript": {
+      "files": 3,
+      "symbols": 14
+    }
+  }
+}

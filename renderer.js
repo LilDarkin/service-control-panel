@@ -10,6 +10,7 @@ const app = {
     textColor: "#00ff00",
     bgColor: "#000000",
     expandedHeight: 300,
+    maxLogLines: 500,
   },
 
   // Initialize the app
@@ -19,30 +20,15 @@ const app = {
     // Load log settings from localStorage
     this.loadLogSettings();
 
+    // Start splash screen animation
+    this.startSplashAnimation();
+
     // Set up event listeners
     window.electronAPI.onInitServices((data) => {
       console.log("Received init-services:", data);
-      this.loadServices(data.services);
-      if (data.parentDir) {
-        this.parentDirectory = data.parentDir;
-        localStorage.setItem("parentDirectory", data.parentDir);
-        this.updateProfileRootDisplay();
-        // Load folders
-        this.loadAvailableFolders();
-      }
+      // Mark services as ready but wait for splash to finish
+      this.pendingServices = data;
     });
-
-    // Fallback: force hide splash after 5 seconds if not hidden
-    setTimeout(() => {
-      const splash = document.getElementById("splash-screen");
-      if (splash && splash.style.display !== "none") {
-        console.log("Force hiding splash screen due to timeout");
-        splash.style.opacity = "0";
-        setTimeout(() => {
-          splash.style.display = "none";
-        }, 700);
-      }
-    }, 5000);
 
     window.electronAPI.onServiceStatus(({ id, status, pid }) => {
       console.log("Service status update:", id, status, pid);
@@ -71,6 +57,87 @@ const app = {
     this.loadProfiles();
   },
 
+  // Splash screen animation with 3-second display
+  pendingServices: null,
+  splashMessages: [
+    "Initializing systems...",
+    "Loading configurations...",
+    "Preparing workspace...",
+    "Starting engines...",
+    "Almost ready..."
+  ],
+
+  startSplashAnimation() {
+    const progressBar = document.getElementById("splash-progress");
+    const statusText = document.getElementById("splash-status");
+    const splash = document.getElementById("splash-screen");
+    
+    const splashDuration = 3000; // 3 seconds
+    const startTime = Date.now();
+    let messageIndex = 0;
+
+    // Animate progress bar
+    const animateProgress = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min((elapsed / splashDuration) * 100, 100);
+      
+      if (progressBar) {
+        progressBar.style.width = `${progress}%`;
+      }
+
+      // Update status message at intervals
+      const newMessageIndex = Math.floor((elapsed / splashDuration) * this.splashMessages.length);
+      if (newMessageIndex !== messageIndex && newMessageIndex < this.splashMessages.length) {
+        messageIndex = newMessageIndex;
+        if (statusText) {
+          statusText.textContent = this.splashMessages[messageIndex];
+        }
+      }
+
+      if (elapsed < splashDuration) {
+        requestAnimationFrame(animateProgress);
+      } else {
+        // Splash duration complete
+        this.finishSplash();
+      }
+    };
+
+    requestAnimationFrame(animateProgress);
+  },
+
+  finishSplash() {
+    const splash = document.getElementById("splash-screen");
+    const statusText = document.getElementById("splash-status");
+    const progressBar = document.getElementById("splash-progress");
+
+    // Set final state
+    if (progressBar) progressBar.style.width = "100%";
+    if (statusText) statusText.textContent = "Ready!";
+
+    // Load services if received
+    if (this.pendingServices) {
+      this.loadServices(this.pendingServices.services);
+      if (this.pendingServices.parentDir) {
+        this.parentDirectory = this.pendingServices.parentDir;
+        localStorage.setItem("parentDirectory", this.pendingServices.parentDir);
+        this.updateProfileRootDisplay();
+        this.loadAvailableFolders();
+      }
+      this.pendingServices = null;
+    }
+
+    // Fade out splash with animation
+    setTimeout(() => {
+      if (splash) {
+        splash.classList.add("fade-out");
+        setTimeout(() => {
+          splash.style.display = "none";
+          console.log("Splash screen hidden");
+        }, 700);
+      }
+    }, 300);
+  },
+
   // Load and render all services
   loadServices(services) {
     console.log("Loading services:", services);
@@ -88,25 +155,7 @@ const app = {
       this.renderService(service);
     });
 
-    console.log("Services rendered, hiding splash screen");
-
-    // Immediately update and hide splash screen
-    const splashStatus = document.getElementById("splash-status");
-    if (splashStatus) {
-      splashStatus.textContent = "Ready!";
-    }
-
-    const splash = document.getElementById("splash-screen");
-    if (splash) {
-      // Force hide immediately with minimal delay
-      splash.style.opacity = "0";
-      setTimeout(() => {
-        splash.style.display = "none";
-        console.log("Splash screen hidden");
-      }, 300);
-    } else {
-      console.error("splash-screen element not found!");
-    }
+    console.log("Services rendered:", services.length);
   },
 
   // Render a single service card
@@ -115,117 +164,119 @@ const app = {
     const card = document.createElement("div");
     card.id = `service-${service.id}`;
     card.dataset.serviceId = service.id;
-    card.className =
-      "service-card rounded-xl p-5 text-white flex flex-col h-full transition-all duration-300";
+    card.className = "service-card rounded-lg p-4 text-white flex flex-col h-full";
 
     // Card is NOT draggable by default
     card.draggable = false;
 
-    const statusClass =
-      service.status === "running"
-        ? "bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30"
-        : "bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30";
-    const statusText = service.status === "running" ? "Running" : "Stopped";
+    const isRunning = service.status === "running";
+    const statusClass = isRunning
+      ? "bg-green-900 text-green-400 border-green-700"
+      : "bg-red-900 text-red-400 border-red-700";
+    const statusText = isRunning ? "Running" : "Stopped";
     const pidDisplay = service.pid ? `PID: ${service.pid}` : "";
-    const pulseClass = service.status === "running" ? "running" : "";
+    const pulseClass = isRunning ? "running" : "";
+    const dotColor = isRunning ? "bg-green-400" : "bg-red-400";
 
     card.innerHTML = `
-            <div class="flex justify-between items-start mb-4">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                    <!-- Drag Handle -->
-                    <button class="drag-handle p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-white transition-colors cursor-move flex-shrink-0" draggable="true" title="Drag to reorder">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
-                        </svg>
-                    </button>
-                    
-                    <div class="p-2 rounded-lg bg-gray-700 bg-opacity-50">
-                        <span class="text-xl">📦</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <input type="text" value="${service.name}" 
-                               onblur="app.updateService('${service.id}', 'name', this.value)"
-                               class="text-lg font-bold bg-transparent border-none text-white focus:outline-none focus:ring-0 px-0 w-full truncate"
-                               title="${service.name}">
-                        <div class="flex items-center gap-2">
-                            <span id="status-${service.id}" class="status-badge ${pulseClass} px-2 py-0.5 border rounded text-xs font-medium uppercase tracking-wide ${statusClass}">
-                                ${statusText}
-                            </span>
-                            <span id="pid-${service.id}" class="text-xs text-gray-500 font-mono">${pidDisplay}</span>
-                        </div>
-                    </div>
-                </div>
-                <button onclick="app.toggleExpand('${service.id}')" id="expand-icon-${service.id}" class="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
+      <div class="flex justify-between items-start mb-3">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <!-- Drag Handle -->
+          <button class="drag-handle p-1 hover:bg-dark-700 rounded text-dark-500 hover:text-white cursor-move flex-shrink-0" draggable="true" title="Drag to reorder">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+            </svg>
+          </button>
+          
+          <div class="flex-1 min-w-0">
+            <input type="text" value="${service.name}" 
+                   onblur="app.updateService('${service.id}', 'name', this.value)"
+                   class="text-sm font-semibold bg-transparent border-none text-white focus:outline-none px-0 w-full truncate"
+                   title="${service.name}">
+            <div class="flex items-center gap-2 mt-0.5">
+              <span id="status-${service.id}" class="status-badge ${pulseClass} inline-flex items-center gap-1 px-1.5 py-0.5 border rounded text-[10px] font-medium uppercase ${statusClass}">
+                <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+                ${statusText}
+              </span>
+              <span id="pid-${service.id}" class="text-[10px] text-dark-500 font-mono">${pidDisplay}</span>
             </div>
-            
-            <div class="space-y-3 mb-4 flex-1">
-                <div>
-                    <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1 block">Path</label>
-                    <select id="path-select-${service.id}" 
-                           onchange="app.updateService('${service.id}', 'path', this.value)"
-                           class="w-full px-3 py-2 rounded bg-gray-800 text-gray-300 border border-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm">
-                        <option value="${service.path}">${service.path}</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1 block">Start Command</label>
-                    <input type="text" value="${service.command}"
-                           onblur="app.updateService('${service.id}', 'command', this.value)"
-                           class="w-full px-3 py-2 rounded bg-gray-800 text-gray-300 border border-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-mono">
-                </div>
-            </div>
-            
-            <div class="grid grid-cols-4 gap-2 mb-4">
-                <button onclick="app.start('${service.id}')" class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors shadow-sm">Start</button>
-                <button onclick="app.stop('${service.id}')" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium transition-colors shadow-sm">Stop</button>
-                <button onclick="app.restart('${service.id}')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors shadow-sm">Restart</button>
-                <button onclick="app.remove('${service.id}')" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded text-sm font-medium transition-colors shadow-sm">🗑️</button>
-            </div>
+          </div>
+        </div>
+        <button onclick="app.toggleExpand('${service.id}')" id="expand-icon-${service.id}" class="p-1 hover:bg-dark-700 rounded text-dark-400 hover:text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+      
+      <div class="space-y-2 mb-3 flex-1">
+        <div>
+          <label class="text-[10px] text-dark-500 uppercase font-medium mb-1 block">Path</label>
+          <select id="path-select-${service.id}" 
+                  onchange="app.updateService('${service.id}', 'path', this.value)"
+                  class="input-field w-full px-2 py-1.5 rounded bg-dark-900 text-dark-300 border border-dark-700 text-xs">
+            <option value="${service.path}">${service.path}</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] text-dark-500 uppercase font-medium mb-1 block">Command</label>
+          <input type="text" value="${service.command}"
+                 onblur="app.updateService('${service.id}', 'command', this.value)"
+                 class="input-field w-full px-2 py-1.5 rounded bg-dark-900 text-dark-300 border border-dark-700 text-xs font-mono">
+        </div>
+      </div>
+      
+      <div class="flex gap-1.5 mb-3">
+        <button onclick="app.start('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium">
+          ▶ Start
+        </button>
+        <button onclick="app.stop('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium">
+          ■ Stop
+        </button>
+        <button onclick="app.restart('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium">
+          ↻ Restart
+        </button>
+        <button onclick="app.remove('${service.id}')" class="btn px-2 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-400 hover:text-white rounded text-xs">
+          🗑
+        </button>
+      </div>
 
-            <!-- Git Actions -->
-            <div class="mb-4">
-                 <button onclick="app.gitPullService('${service.id}')" class="w-full px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Git Pull
-                </button>
-            </div>
-            
-            <!-- Git Info and Terminal -->
-            <div class="bg-black rounded-lg overflow-hidden border border-gray-700 flex flex-col transition-all duration-300" style="height: 256px;" id="terminal-container-${service.id}">
-                <div class="bg-gray-800 px-3 py-2 flex items-center justify-between border-b border-gray-700">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-400">Branch:</span>
-                        <span id="git-branch-${service.id}" class="text-xs font-mono">Loading...</span>
-                    </div>
-                    <div class="flex gap-2">
-                         <button onclick="app.clearLog('${service.id}')" class="text-xs text-gray-500 hover:text-white transition-colors">Clear</button>
-                    </div>
-                </div>
-                
-                <div class="log-container flex-1 p-3 overflow-y-auto text-xs" 
-                     id="log-${service.id}" 
-                     style="font-family: ${this.logSettings.fontFamily}; font-size: ${this.logSettings.fontSize}px; color: ${this.logSettings.textColor}; background-color: ${this.logSettings.bgColor};">
+      <!-- Git Pull -->
+      <button onclick="app.gitPullService('${service.id}')" class="btn w-full px-2 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-medium flex items-center justify-center gap-1.5 mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Git Pull
+      </button>
+      
+      <!-- Terminal -->
+      <div class="rounded overflow-hidden border border-dark-700 flex flex-col bg-dark-950" style="height: 200px;" id="terminal-container-${service.id}">
+        <div class="bg-dark-800 px-2 py-1.5 flex items-center justify-between border-b border-dark-700">
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-dark-500">Branch:</span>
+            <span id="git-branch-${service.id}" class="text-[10px] font-mono text-blue-400">Loading...</span>
+          </div>
+          <button onclick="app.clearLog('${service.id}')" class="text-[10px] text-dark-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-dark-700">Clear</button>
+        </div>
+        
+        <div class="log-container flex-1 p-2 overflow-y-auto text-xs" 
+             id="log-${service.id}" 
+             style="font-family: ${this.logSettings.fontFamily}; font-size: ${this.logSettings.fontSize}px; color: ${this.logSettings.textColor}; background-color: ${this.logSettings.bgColor};">
 > Ready
 </div>
-                
-                <div class="p-2 bg-gray-800 border-t border-gray-700">
-                    <div class="flex gap-2">
-                        <span class="text-gray-500 select-none">$</span>
-                        <input type="text" 
-                               id="command-input-${service.id}"
-                               placeholder="Type command..."
-                               class="flex-1 bg-transparent border-none text-white text-sm focus:ring-0 p-0 font-mono"
-                               onkeypress="if(event.key === 'Enter') app.executeCommand('${service.id}')">
-                    </div>
-                </div>
-            </div>
-        `;
+        
+        <div class="px-2 py-1.5 bg-dark-800 border-t border-dark-700">
+          <div class="flex gap-2 items-center">
+            <span class="text-dark-500 text-xs select-none">$</span>
+            <input type="text" 
+                   id="command-input-${service.id}"
+                   placeholder="Enter command..."
+                   class="flex-1 bg-transparent border-none text-white text-xs focus:outline-none p-0 font-mono"
+                   onkeypress="if(event.key === 'Enter') app.executeCommand('${service.id}')">
+          </div>
+        </div>
+      </div>
+    `;
 
     container.appendChild(card);
 
@@ -243,6 +294,17 @@ const app = {
 
     this.loadGitBranch(service.id);
     this.updatePathDropdown(service.id);
+
+    // Add scroll listener to hide "new logs" indicator when user scrolls to bottom
+    const logElement = document.getElementById(`log-${service.id}`);
+    if (logElement) {
+      logElement.addEventListener("scroll", () => {
+        const isNearBottom = logElement.scrollHeight - logElement.scrollTop - logElement.clientHeight < 50;
+        if (isNearBottom) {
+          this.hideNewLogsIndicator(service.id);
+        }
+      });
+    }
   },
 
   // Drag and Drop Handlers
@@ -317,15 +379,16 @@ const app = {
     const pidElement = document.getElementById(`pid-${id}`);
 
     if (badge) {
-      const statusClass =
-        status === "running"
-          ? "bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30"
-          : "bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30";
-      const statusText = status === "running" ? "Running" : "Stopped";
-      const pulseClass = status === "running" ? "running" : "";
+      const isRunning = status === "running";
+      const statusClass = isRunning
+        ? "bg-green-900 text-green-400 border-green-700"
+        : "bg-red-900 text-red-400 border-red-700";
+      const statusText = isRunning ? "Running" : "Stopped";
+      const pulseClass = isRunning ? "running" : "";
+      const dotColor = isRunning ? "bg-green-400" : "bg-red-400";
 
-      badge.className = `status-badge ${pulseClass} px-2 py-0.5 border rounded text-xs font-medium uppercase tracking-wide ${statusClass}`;
-      badge.textContent = statusText;
+      badge.className = `status-badge ${pulseClass} inline-flex items-center gap-1 px-1.5 py-0.5 border rounded text-[10px] font-medium uppercase ${statusClass}`;
+      badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>${statusText}`;
     }
 
     if (pidElement) {
@@ -345,9 +408,72 @@ const app = {
       const cleanLog = this.stripAnsiCodes(log);
       const span = document.createElement("span");
       span.textContent = cleanLog;
+
+      // Check if user is scrolled near bottom before appending
+      const isNearBottom = logElement.scrollHeight - logElement.scrollTop - logElement.clientHeight < 50;
+
       logElement.appendChild(span);
+
+      // Trim old logs if exceeding max lines
+      this.trimLogIfNeeded(logElement);
+
+      // Only auto-scroll if user was at bottom
+      if (isNearBottom) {
+        logElement.scrollTop = logElement.scrollHeight;
+        this.hideNewLogsIndicator(id);
+      } else {
+        // Show "new logs" indicator
+        this.showNewLogsIndicator(id);
+      }
+    }
+  },
+
+  // Trim log container to max lines to prevent memory issues
+  trimLogIfNeeded(logElement) {
+    const maxLines = this.logSettings.maxLogLines || 1000;
+    const children = logElement.children;
+    
+    // Remove oldest entries if we exceed max
+    while (children.length > maxLines) {
+      logElement.removeChild(children[0]);
+    }
+  },
+
+  // Show indicator that new logs are available
+  showNewLogsIndicator(id) {
+    const terminalContainer = document.getElementById(`terminal-container-${id}`);
+    if (!terminalContainer) return;
+
+    // Check if indicator already exists
+    let indicator = document.getElementById(`new-logs-${id}`);
+    if (!indicator) {
+      indicator = document.createElement("button");
+      indicator.id = `new-logs-${id}`;
+      indicator.className = "new-logs-indicator absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1 rounded-full shadow-lg transition-all z-10";
+      indicator.textContent = "↓ New logs";
+      indicator.onclick = () => this.scrollToBottom(id);
+      
+      // Make terminal container relative for positioning
+      terminalContainer.style.position = "relative";
+      terminalContainer.appendChild(indicator);
+    }
+  },
+
+  // Hide new logs indicator
+  hideNewLogsIndicator(id) {
+    const indicator = document.getElementById(`new-logs-${id}`);
+    if (indicator) {
+      indicator.remove();
+    }
+  },
+
+  // Scroll log to bottom and hide indicator
+  scrollToBottom(id) {
+    const logElement = document.getElementById(`log-${id}`);
+    if (logElement) {
       logElement.scrollTop = logElement.scrollHeight;
     }
+    this.hideNewLogsIndicator(id);
   },
 
   clearLog(id) {
@@ -419,19 +545,25 @@ const app = {
     console.log("Git Pull Service:", id);
     const output = document.getElementById(`log-${id}`);
     if (output) {
+      const isNearBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
       output.innerHTML += `\n> Executing: git pull\n`;
-      output.scrollTop = output.scrollHeight;
+      if (isNearBottom) output.scrollTop = output.scrollHeight;
     }
 
     const result = await window.electronAPI.executeCommand(id, "git pull");
 
     if (output) {
+      const isNearBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
       if (result.success) {
         output.innerHTML += result.output + "\n";
       } else {
         output.innerHTML += "Error: " + result.output + "\n";
       }
-      output.scrollTop = output.scrollHeight;
+      if (isNearBottom) {
+        output.scrollTop = output.scrollHeight;
+      } else {
+        this.showNewLogsIndicator(id);
+      }
     }
   },
 
@@ -441,6 +573,7 @@ const app = {
     const command = input.value.trim();
     if (!command) return;
 
+    const isNearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 50;
     log.innerHTML += `\n> ${command}\n`;
     const result = await window.electronAPI.executeCommand(serviceId, command);
 
@@ -449,7 +582,12 @@ const app = {
     } else {
       log.innerHTML += "Error: " + result.output + "\n";
     }
-    log.scrollTop = log.scrollHeight;
+    
+    if (isNearBottom) {
+      log.scrollTop = log.scrollHeight;
+    } else {
+      this.showNewLogsIndicator(serviceId);
+    }
     input.value = "";
   },
 
