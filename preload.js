@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getVersion: () => ipcRenderer.invoke("get-version"),
   onUpdateStatus: (callback) =>
     ipcRenderer.on("update-status", (event, data) => callback(data)),
+  installUpdate: () => ipcRenderer.send("install-update"),
 });
 
 console.log("Preload script loaded");

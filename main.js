@@ -316,18 +316,7 @@ app.whenReady().then(() => {
         status: "downloaded", 
         version: info.version 
       });
-      
-      // Prompt user to restart
-      dialog.showMessageBox(mainWindow, {
-        type: "info",
-        title: "Update Ready",
-        message: `Version ${info.version} has been downloaded. Restart now to update?`,
-        buttons: ["Restart", "Later"]
-      }).then(result => {
-        if (result.response === 0) {
-          autoUpdater.quitAndInstall();
-        }
-      });
+      // UI banner will handle user interaction
     });
 
     autoUpdater.on("error", (err) => {
@@ -339,6 +328,13 @@ app.whenReady().then(() => {
     setTimeout(() => {
       autoUpdater.checkForUpdates();
     }, 3000);
+  }
+});
+
+// Handle install update request from renderer
+ipcMain.on("install-update", () => {
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall();
   }
 });
 

@@ -85,14 +85,100 @@ const app = {
     }
   },
 
+  // Update state
+  updateReady: false,
+  updateDismissed: false,
+
   // Handle update status notifications
   handleUpdateStatus(data) {
     console.log("Update status:", data);
-    // Could add UI notifications here if desired
-    if (data.status === "available") {
-      console.log(`New version ${data.version} available!`);
-    } else if (data.status === "downloading") {
-      console.log(`Downloading update: ${data.percent}%`);
+    
+    const banner = document.getElementById("update-banner");
+    const icon = document.getElementById("update-icon");
+    const title = document.getElementById("update-title");
+    const message = document.getElementById("update-message");
+    const progressContainer = document.getElementById("update-progress-container");
+    const progressBar = document.getElementById("update-progress-bar");
+    const progressText = document.getElementById("update-progress-text");
+    const actionBtn = document.getElementById("update-action-btn");
+    
+    if (!banner) return;
+    
+    // Don't show if user dismissed and it's the same state
+    if (this.updateDismissed && data.status !== "downloaded") return;
+    
+    switch (data.status) {
+      case "checking":
+        // Don't show banner for checking
+        break;
+        
+      case "available":
+        banner.classList.remove("hidden");
+        icon.textContent = "⬇️";
+        title.textContent = "Update Available";
+        message.textContent = `Version ${data.version} is downloading...`;
+        progressContainer.classList.remove("hidden");
+        progressText.classList.remove("hidden");
+        actionBtn.classList.add("hidden");
+        break;
+        
+      case "downloading":
+        banner.classList.remove("hidden");
+        icon.textContent = "⬇️";
+        title.textContent = "Downloading Update";
+        message.textContent = `Version is being downloaded...`;
+        progressContainer.classList.remove("hidden");
+        progressText.classList.remove("hidden");
+        progressBar.style.width = `${data.percent}%`;
+        progressText.textContent = `${data.percent}%`;
+        actionBtn.classList.add("hidden");
+        break;
+        
+      case "downloaded":
+        this.updateReady = true;
+        this.updateDismissed = false; // Always show when ready
+        banner.classList.remove("hidden");
+        banner.className = banner.className.replace("from-blue-600 to-indigo-600", "from-green-500 to-emerald-600");
+        icon.textContent = "✅";
+        title.textContent = "Update Ready!";
+        message.textContent = `Version ${data.version} is ready to install`;
+        progressContainer.classList.add("hidden");
+        progressText.classList.add("hidden");
+        actionBtn.classList.remove("hidden");
+        actionBtn.textContent = "Restart Now";
+        break;
+        
+      case "not-available":
+        // Hide banner if no update
+        banner.classList.add("hidden");
+        break;
+        
+      case "error":
+        banner.classList.remove("hidden");
+        banner.className = banner.className.replace("from-blue-600 to-indigo-600", "from-red-500 to-red-600");
+        icon.textContent = "❌";
+        title.textContent = "Update Error";
+        message.textContent = data.error || "Failed to check for updates";
+        progressContainer.classList.add("hidden");
+        progressText.classList.add("hidden");
+        actionBtn.classList.add("hidden");
+        break;
+    }
+  },
+
+  // Install the downloaded update
+  installUpdate() {
+    if (this.updateReady) {
+      window.electronAPI.installUpdate();
+    }
+  },
+
+  // Dismiss update banner
+  dismissUpdate() {
+    const banner = document.getElementById("update-banner");
+    if (banner) {
+      banner.classList.add("hidden");
+      this.updateDismissed = true;
     }
   },
 

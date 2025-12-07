@@ -163,6 +163,36 @@
       <div class="absolute bottom-6 text-dark-700 text-xs">v<span id="splash-version">...</span></div>
     </div>
 
+    <!-- Update Notification Banner -->
+    <div id="update-banner" class="hidden fixed top-0 left-0 right-0 z-40 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
+      <div class="max-w-screen-xl mx-auto px-4 py-2.5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div id="update-icon" class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-sm">
+            🔄
+          </div>
+          <div>
+            <p id="update-title" class="text-sm font-medium">Update Available</p>
+            <p id="update-message" class="text-xs text-blue-100">A new version is available</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- Progress bar (shown during download) -->
+          <div id="update-progress-container" class="hidden w-32 h-1.5 bg-white/20 rounded-full overflow-hidden">
+            <div id="update-progress-bar" class="h-full bg-white rounded-full" style="width: 0%"></div>
+          </div>
+          <span id="update-progress-text" class="hidden text-xs text-blue-100 w-10 text-right"></span>
+          
+          <!-- Action buttons -->
+          <button id="update-action-btn" onclick="app.installUpdate()" class="hidden px-3 py-1 bg-white text-blue-600 text-xs font-medium rounded hover:bg-blue-50">
+            Restart Now
+          </button>
+          <button onclick="app.dismissUpdate()" class="px-2 py-1 text-white/70 hover:text-white text-xs">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Sidebar -->
     <aside class="sidebar w-56 flex-shrink-0 flex flex-col">
       <!-- Logo -->
