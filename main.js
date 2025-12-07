@@ -3,6 +3,15 @@ const path = require("path");
 const fs = require("fs");
 const { spawn, execSync } = require("child_process");
 
+// Auto-updater (only in production)
+let autoUpdater = null;
+if (app.isPackaged) {
+  const { autoUpdater: updater } = require("electron-updater");
+  autoUpdater = updater;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+}
+
 let mainWindow;
 const services = {};
 const configPath = path.join(app.getPath("userData"), "services.json");
@@ -273,6 +282,64 @@ app.whenReady().then(() => {
       parentDir: profileData.parentDir || "",
     });
   });
+
+  // Auto-updater setup (only in packaged app)
+  if (autoUpdater) {
+    autoUpdater.on("checking-for-update", () => {
+      console.log("Checking for updates...");
+      mainWindow.webContents.send("update-status", { status: "checking" });
+    });
+
+    autoUpdater.on("update-available", (info) => {
+      console.log("Update available:", info.version);
+      mainWindow.webContents.send("update-status", { 
+        status: "available", 
+        version: info.version 
+      });
+    });
+
+    autoUpdater.on("update-not-available", () => {
+      console.log("No updates available");
+      mainWindow.webContents.send("update-status", { status: "not-available" });
+    });
+
+    autoUpdater.on("download-progress", (progress) => {
+      mainWindow.webContents.send("update-status", { 
+        status: "downloading", 
+        percent: Math.round(progress.percent) 
+      });
+    });
+
+    autoUpdater.on("update-downloaded", (info) => {
+      console.log("Update downloaded:", info.version);
+      mainWindow.webContents.send("update-status", { 
+        status: "downloaded", 
+        version: info.version 
+      });
+      
+      // Prompt user to restart
+      dialog.showMessageBox(mainWindow, {
+        type: "info",
+        title: "Update Ready",
+        message: `Version ${info.version} has been downloaded. Restart now to update?`,
+        buttons: ["Restart", "Later"]
+      }).then(result => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    });
+
+    autoUpdater.on("error", (err) => {
+      console.error("Update error:", err);
+      mainWindow.webContents.send("update-status", { status: "error", error: err.message });
+    });
+
+    // Check for updates after a short delay
+    setTimeout(() => {
+      autoUpdater.checkForUpdates();
+    }, 3000);
+  }
 });
 
 app.on("before-quit", () => {
@@ -312,6 +379,10 @@ ipcMain.handle("get-services", () => {
     command: s.command,
     status: s.status,
   }));
+});
+
+ipcMain.handle("get-version", () => {
+  return app.getVersion();
 });
 
 ipcMain.on("start-service", (event, id) => {

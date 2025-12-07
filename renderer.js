@@ -56,6 +56,44 @@ const app = {
 
     // Load available profiles
     this.loadProfiles();
+
+    // Load and display version
+    this.loadVersion();
+
+    // Listen for update status
+    window.electronAPI.onUpdateStatus((data) => {
+      this.handleUpdateStatus(data);
+    });
+  },
+
+  // Load and display app version
+  async loadVersion() {
+    try {
+      const version = await window.electronAPI.getVersion();
+      // Update sidebar version
+      const versionEl = document.getElementById("app-version");
+      if (versionEl) {
+        versionEl.textContent = version;
+      }
+      // Update splash version
+      const splashVersionEl = document.getElementById("splash-version");
+      if (splashVersionEl) {
+        splashVersionEl.textContent = version;
+      }
+    } catch (e) {
+      console.log("Could not load version:", e);
+    }
+  },
+
+  // Handle update status notifications
+  handleUpdateStatus(data) {
+    console.log("Update status:", data);
+    // Could add UI notifications here if desired
+    if (data.status === "available") {
+      console.log(`New version ${data.version} available!`);
+    } else if (data.status === "downloading") {
+      console.log(`Downloading update: ${data.percent}%`);
+    }
   },
 
   // Splash screen animation with 3-second display
@@ -678,6 +716,21 @@ const app = {
         text.textContent = isVisible ? "Show" : "Hide";
       }
     }
+  },
+
+  // Clear all logs for all services
+  clearAllLogs() {
+    Object.keys(this.services).forEach(id => {
+      const logElement = document.getElementById(`log-${id}`);
+      if (logElement) {
+        logElement.innerHTML = "> Logs cleared\n";
+      }
+      // Also clear any buffered logs
+      if (this.logBuffer[id]) {
+        this.logBuffer[id] = [];
+      }
+    });
+    console.log("All logs cleared");
   },
 
   // Add new service

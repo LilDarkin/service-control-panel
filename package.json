@@ -1,6 +1,6 @@
 {
   "name": "service-panel-pro",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "A modern service control panel for managing multiple microservices",
   "main": "main.js",
   "author": "Bon",
@@ -10,9 +10,14 @@
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build:linux": "electron-builder --linux",
+    "publish": "dotenv -- electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "electron": "^39.2.3",
     "electron-builder": "^26.0.12"
   },
@@ -29,9 +34,18 @@
     "directories": {
       "output": "dist"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "LilDarkin",
+      "repo": "control-panel"
+    },
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "forceCodeSigning": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     },
     "mac": {
       "target": "dmg"

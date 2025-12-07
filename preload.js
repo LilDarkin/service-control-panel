@@ -54,6 +54,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("delete-profile", profileName),
   updateProfileRoot: (profileName, parentDir) =>
     ipcRenderer.invoke("update-profile-root", profileName, parentDir),
+
+  // Version and updates
+  getVersion: () => ipcRenderer.invoke("get-version"),
+  onUpdateStatus: (callback) =>
+    ipcRenderer.on("update-status", (event, data) => callback(data)),
 });
 
 console.log("Preload script loaded");
