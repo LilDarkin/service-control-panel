@@ -5,6 +5,7 @@ const app = {
   parentDirectory: "",
   availableFolders: [],
   logsVisible: false, // Default: logs hidden for performance
+  isDarkMode: true, // Default: dark mode
   logSettings: {
     fontSize: 12,
     fontFamily: "'JetBrains Mono', monospace",
@@ -17,6 +18,9 @@ const app = {
   // Initialize the app
   async init() {
     console.log("Initializing app...");
+
+    // Load theme first (before anything renders)
+    this.loadTheme();
 
     // Load log settings from localStorage
     this.loadLogSettings();
@@ -1309,6 +1313,40 @@ const app = {
   stripAnsiCodes(text) {
     // ANSI escape code regex
     return text.replace(/\x1b\[[0-9;]*m/g, "");
+  },
+
+  // Load theme from localStorage
+  loadTheme() {
+    const savedTheme = localStorage.getItem("theme");
+    this.isDarkMode = savedTheme !== "light"; // Default to dark if not set
+    this.applyTheme();
+  },
+
+  // Toggle between light and dark mode
+  toggleTheme() {
+    this.isDarkMode = !this.isDarkMode;
+    localStorage.setItem("theme", this.isDarkMode ? "dark" : "light");
+    this.applyTheme();
+  },
+
+  // Apply the current theme
+  applyTheme() {
+    const body = document.body;
+    const icon = document.getElementById("theme-icon");
+    const label = document.getElementById("theme-label");
+    const dot = document.getElementById("theme-toggle-dot");
+
+    if (this.isDarkMode) {
+      body.classList.remove("light-mode");
+      if (icon) icon.textContent = "🌙";
+      if (label) label.textContent = "Dark";
+      if (dot) dot.style.transform = "translateX(0)";
+    } else {
+      body.classList.add("light-mode");
+      if (icon) icon.textContent = "☀️";
+      if (label) label.textContent = "Light";
+      if (dot) dot.style.transform = "translateX(20px)";
+    }
   },
 };
 
