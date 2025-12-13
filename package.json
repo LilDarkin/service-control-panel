@@ -1,6 +1,6 @@
 {
   "name": "service-panel-pro",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A modern service control panel for managing multiple microservices",
   "main": "main.js",
   "author": "Bon",

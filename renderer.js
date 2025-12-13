@@ -14,6 +14,8 @@ const app = {
     expandedHeight: 300,
     maxLogLines: 350, // Default max log lines
   },
+  // Search state per service
+  searchState: {},
 
   // Initialize the app
   async init() {
@@ -241,11 +243,7 @@ const app = {
       let notes = this.pendingUpdateInfo.releaseNotes;
       if (!notes || notes.trim() === "No release notes available.") {
         // Fallback or "what you did now" if testing locally
-        notes =
-          "• **Log Persistence**: Logs are now saved to disk automatically to prevent data loss.\n" +
-          "• **Performance**: Reduced application lag by optimizing live log rendering.\n" +
-          "• **History**: Added ability to load full historical logs from file.\n" +
-          "• **Cleaner UI**: Improved log controls and status indicators.";
+        notes = "• Search Functionality";
       }
 
       // Simple format
@@ -548,16 +546,62 @@ const app = {
       <div class="rounded overflow-hidden border border-dark-700 flex flex-col bg-dark-950" style="height: 200px; ${
         this.logsVisible ? "" : "display: none;"
       }" id="terminal-container-${service.id}">
-        <div class="bg-dark-800 px-2 py-1.5 flex items-center justify-between border-b border-dark-700">
-          <div class="flex items-center gap-2">
-            <span class="text-[10px] text-dark-500">Branch:</span>
-            <span id="git-branch-${
-              service.id
-            }" class="text-[10px] font-mono text-blue-400">Loading...</span>
+        <!-- Terminal Header -->
+        <div class="bg-dark-800 border-b border-dark-700">
+          <!-- Top Row: Branch + Actions -->
+          <div class="px-2 py-1.5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-dark-500">Branch:</span>
+              <span id="git-branch-${
+                service.id
+              }" class="text-[10px] font-mono text-blue-400">Loading...</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button onclick="app.toggleSearchBar('${service.id}')" class="text-[10px] text-dark-400 hover:text-white px-1.5 py-0.5 rounded hover:bg-dark-700 flex items-center gap-1" title="Toggle search (Ctrl+F)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Search
+              </button>
+              <button onclick="app.clearLog('${
+                service.id
+              }')" class="text-[10px] text-dark-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-dark-700">Clear</button>
+            </div>
           </div>
-          <button onclick="app.clearLog('${
-            service.id
-          }')" class="text-[10px] text-dark-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-dark-700">Clear</button>
+          <!-- Search Row (hidden by default) -->
+          <div id="search-bar-${service.id}" class="px-2 py-1.5 border-t border-dark-700 hidden">
+            <div class="flex items-center gap-2">
+              <div class="flex-1 flex items-center gap-2 bg-dark-900 rounded px-2 py-1 border border-dark-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-dark-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" 
+                       id="search-input-${service.id}"
+                       placeholder="Search in logs..."
+                       class="bg-transparent border-none text-white text-[11px] focus:outline-none p-0 flex-1 min-w-0"
+                       oninput="app.searchLogs('${service.id}', this.value)"
+                       onkeydown="app.handleSearchKeydown(event, '${service.id}')">
+                <span id="search-count-${service.id}" class="text-[10px] text-dark-400 whitespace-nowrap"></span>
+              </div>
+              <div class="flex items-center gap-0.5">
+                <button onclick="app.searchPrev('${service.id}')" class="text-dark-400 hover:text-white p-1 rounded hover:bg-dark-700" title="Previous (Shift+Enter)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                  </svg>
+                </button>
+                <button onclick="app.searchNext('${service.id}')" class="text-dark-400 hover:text-white p-1 rounded hover:bg-dark-700" title="Next (Enter)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <button onclick="app.clearSearch('${service.id}')" class="text-dark-400 hover:text-white p-1 rounded hover:bg-dark-700" title="Clear (Esc)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="log-container flex-1 p-2 overflow-y-auto text-xs" 
@@ -857,12 +901,262 @@ const app = {
     if (logElement) {
       logElement.innerHTML = "> Logs Cleared (File Truncated)\n";
     }
-    // Clear buffer
-    if (this.logBuffer[id]) {
-      this.logBuffer[id] = [];
+    // Also clear search state when logs are cleared
+    this.clearSearch(id);
+  },
+
+  // Toggle search bar visibility
+  toggleSearchBar(id) {
+    const searchBar = document.getElementById(`search-bar-${id}`);
+    if (searchBar) {
+      const isHidden = searchBar.classList.contains('hidden');
+      searchBar.classList.toggle('hidden');
+      
+      // Focus the input when showing
+      if (isHidden) {
+        const input = document.getElementById(`search-input-${id}`);
+        if (input) {
+          setTimeout(() => input.focus(), 50);
+        }
+      } else {
+        // Clear search when hiding
+        this.clearSearch(id);
+      }
     }
-    // Call IPC to clear file
-    window.electronAPI.clearServiceLogs(id);
+  },
+
+  // Search debounce timers per service
+  searchDebounceTimers: {},
+
+  // Search functionality for logs (debounced entry point)
+  searchLogs(id, query) {
+    // Clear any existing debounce timer for this service
+    if (this.searchDebounceTimers[id]) {
+      clearTimeout(this.searchDebounceTimers[id]);
+    }
+    
+    const countElement = document.getElementById(`search-count-${id}`);
+    
+    // Show "searching..." for immediate feedback
+    if (query && query.trim() !== '' && countElement) {
+      countElement.textContent = 'Searching...';
+    }
+    
+    // Debounce the actual search (300ms delay)
+    this.searchDebounceTimers[id] = setTimeout(() => {
+      this.performSearch(id, query);
+    }, 300);
+  },
+
+  // Actual search implementation (optimized)
+  performSearch(id, query) {
+    const logElement = document.getElementById(`log-${id}`);
+    const countElement = document.getElementById(`search-count-${id}`);
+    
+    if (!logElement) return;
+    
+    // Initialize search state for this service
+    if (!this.searchState[id]) {
+      this.searchState[id] = { query: '', matches: [], currentIndex: -1, originalHTML: '' };
+    }
+    
+    // Clear previous highlights first
+    this.removeHighlights(id);
+    
+    if (!query || query.trim() === '') {
+      this.searchState[id] = { query: '', matches: [], currentIndex: -1 };
+      if (countElement) countElement.textContent = '';
+      return;
+    }
+    
+    this.searchState[id].query = query;
+    this.searchState[id].matches = [];
+    this.searchState[id].currentIndex = -1;
+    
+    // Use requestAnimationFrame to avoid blocking UI
+    requestAnimationFrame(() => {
+      const MAX_HIGHLIGHTS = 500; // Limit highlights for performance
+      const escapedQuery = this.escapeRegex(query);
+      const regex = new RegExp(escapedQuery, 'gi');
+      
+      // Get text content and count total matches first
+      const fullText = logElement.textContent;
+      const totalMatches = (fullText.match(regex) || []).length;
+      
+      if (totalMatches === 0) {
+        if (countElement) countElement.textContent = 'No match';
+        return;
+      }
+      
+      // Collect text nodes efficiently
+      const textNodes = [];
+      const walker = document.createTreeWalker(logElement, NodeFilter.SHOW_TEXT, null, false);
+      while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+      }
+      
+      // Process nodes in batches to avoid freezing
+      let highlightCount = 0;
+      const fragment = document.createDocumentFragment();
+      
+      for (let i = 0; i < textNodes.length && highlightCount < MAX_HIGHLIGHTS; i++) {
+        const textNode = textNodes[i];
+        const text = textNode.textContent;
+        
+        if (!regex.test(text)) continue;
+        regex.lastIndex = 0; // Reset regex
+        
+        // Split text by matches and create highlighted spans
+        const parts = text.split(regex);
+        const matches = text.match(regex) || [];
+        
+        if (matches.length === 0) continue;
+        
+        const wrapper = document.createElement('span');
+        wrapper.className = 'search-wrapper';
+        
+        for (let j = 0; j < parts.length; j++) {
+          if (parts[j]) {
+            wrapper.appendChild(document.createTextNode(parts[j]));
+          }
+          if (j < matches.length && highlightCount < MAX_HIGHLIGHTS) {
+            const mark = document.createElement('mark');
+            mark.className = 'search-highlight';
+            mark.textContent = matches[j];
+            wrapper.appendChild(mark);
+            this.searchState[id].matches.push(mark);
+            highlightCount++;
+          }
+        }
+        
+        textNode.parentNode.replaceChild(wrapper, textNode);
+      }
+      
+      // Update counter
+      const matchCount = this.searchState[id].matches.length;
+      if (countElement) {
+        if (totalMatches > MAX_HIGHLIGHTS) {
+          countElement.textContent = `${matchCount}/${totalMatches}+`;
+        } else {
+          countElement.textContent = `${matchCount} found`;
+        }
+      }
+      
+      // Jump to first match
+      if (matchCount > 0) {
+        this.searchState[id].currentIndex = 0;
+        this.highlightCurrentMatch(id);
+      }
+    });
+  },
+
+  // Navigate to previous match
+  searchPrev(id) {
+    const state = this.searchState[id];
+    if (!state || state.matches.length === 0) return;
+    
+    state.currentIndex = (state.currentIndex - 1 + state.matches.length) % state.matches.length;
+    this.highlightCurrentMatch(id);
+  },
+
+  // Navigate to next match
+  searchNext(id) {
+    const state = this.searchState[id];
+    if (!state || state.matches.length === 0) return;
+    
+    state.currentIndex = (state.currentIndex + 1) % state.matches.length;
+    this.highlightCurrentMatch(id);
+  },
+
+  // Highlight and scroll to current match
+  highlightCurrentMatch(id) {
+    const state = this.searchState[id];
+    const countElement = document.getElementById(`search-count-${id}`);
+    
+    if (!state || state.matches.length === 0) return;
+    
+    // Remove active class from previous match only (more efficient)
+    const prevActive = document.querySelector(`#log-${id} .search-highlight-active`);
+    if (prevActive) {
+      prevActive.classList.remove('search-highlight-active');
+    }
+    
+    // Add active class to current match
+    const currentMatch = state.matches[state.currentIndex];
+    if (currentMatch) {
+      currentMatch.classList.add('search-highlight-active');
+      // Use instant scroll for better responsiveness
+      currentMatch.scrollIntoView({ behavior: 'auto', block: 'center' });
+    }
+    
+    // Update counter to show current position
+    if (countElement) {
+      countElement.textContent = `${state.currentIndex + 1}/${state.matches.length}`;
+    }
+  },
+
+  // Clear search and remove highlights
+  clearSearch(id) {
+    // Cancel any pending search
+    if (this.searchDebounceTimers[id]) {
+      clearTimeout(this.searchDebounceTimers[id]);
+    }
+    
+    const inputElement = document.getElementById(`search-input-${id}`);
+    const countElement = document.getElementById(`search-count-${id}`);
+    
+    this.removeHighlights(id);
+    
+    if (inputElement) inputElement.value = '';
+    if (countElement) countElement.textContent = '';
+    
+    if (this.searchState[id]) {
+      this.searchState[id] = { query: '', matches: [], currentIndex: -1 };
+    }
+  },
+
+  // Remove all highlight marks (optimized)
+  removeHighlights(id) {
+    const logElement = document.getElementById(`log-${id}`);
+    if (!logElement) return;
+    
+    // Find all wrapper spans we created
+    const wrappers = logElement.querySelectorAll('.search-wrapper');
+    wrappers.forEach(wrapper => {
+      const text = wrapper.textContent;
+      wrapper.parentNode.replaceChild(document.createTextNode(text), wrapper);
+    });
+    
+    // Also handle any loose mark elements
+    const marks = logElement.querySelectorAll('mark.search-highlight, mark.search-highlight-active');
+    marks.forEach(mark => {
+      mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark);
+    });
+    
+    // Normalize to merge adjacent text nodes
+    logElement.normalize();
+  },
+
+  // Handle keyboard shortcuts in search input
+  handleSearchKeydown(event, id) {
+    if (event.key === 'Enter') {
+      if (event.shiftKey) {
+        this.searchPrev(id);
+      } else {
+        this.searchNext(id);
+      }
+      event.preventDefault();
+    } else if (event.key === 'Escape') {
+      this.clearSearch(id);
+      // Also hide the search bar
+      this.toggleSearchBar(id);
+      event.preventDefault();
+    }
+  },
+
+  // Escape special regex characters
+  escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   },
 
   // Remove service card
