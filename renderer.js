@@ -94,55 +94,70 @@ const app = {
   updateDismissed: false,
 
   // Handle update status notifications
+  // Handle update status notifications
+  pendingUpdateInfo: null,
+
   handleUpdateStatus(data) {
     console.log("Update status:", data);
-    
+
     const banner = document.getElementById("update-banner");
     const icon = document.getElementById("update-icon");
     const title = document.getElementById("update-title");
     const message = document.getElementById("update-message");
-    const progressContainer = document.getElementById("update-progress-container");
+    const progressContainer = document.getElementById(
+      "update-progress-container"
+    );
     const progressBar = document.getElementById("update-progress-bar");
     const progressText = document.getElementById("update-progress-text");
     const actionBtn = document.getElementById("update-action-btn");
-    
+
     if (!banner) return;
-    
+
     // Don't show if user dismissed and it's the same state
-    if (this.updateDismissed && data.status !== "downloaded") return;
-    
+    if (
+      this.updateDismissed &&
+      data.status !== "downloaded" &&
+      data.status !== "available"
+    )
+      return;
+
     switch (data.status) {
       case "checking":
-        // Don't show banner for checking
         break;
-        
+
       case "available":
+        this.pendingUpdateInfo = data;
         banner.classList.remove("hidden");
-        icon.textContent = "⬇️";
-        title.textContent = "Update Available";
-        message.textContent = `Version ${data.version} is downloading...`;
-        progressContainer.classList.remove("hidden");
-        progressText.classList.remove("hidden");
-        actionBtn.classList.add("hidden");
+        icon.textContent = "✨";
+        title.textContent = "New Version Available";
+        message.textContent = `Version ${data.version} is ready to explore`;
+        progressContainer.classList.add("hidden");
+        progressText.classList.add("hidden");
+        actionBtn.classList.remove("hidden");
+        actionBtn.textContent = "Update Now";
+        actionBtn.onclick = () => this.showUpdateModal();
         break;
-        
+
       case "downloading":
         banner.classList.remove("hidden");
         icon.textContent = "⬇️";
         title.textContent = "Downloading Update";
-        message.textContent = `Version is being downloaded...`;
+        message.textContent = `Getting things ready...`;
         progressContainer.classList.remove("hidden");
         progressText.classList.remove("hidden");
         progressBar.style.width = `${data.percent}%`;
         progressText.textContent = `${data.percent}%`;
         actionBtn.classList.add("hidden");
         break;
-        
+
       case "downloaded":
         this.updateReady = true;
         this.updateDismissed = false; // Always show when ready
         banner.classList.remove("hidden");
-        banner.className = banner.className.replace("from-blue-600 to-indigo-600", "from-green-500 to-emerald-600");
+        banner.className = banner.className.replace(
+          "from-blue-600 to-indigo-600",
+          "from-green-500 to-emerald-600"
+        );
         icon.textContent = "✅";
         title.textContent = "Update Ready!";
         message.textContent = `Version ${data.version} is ready to install`;
@@ -150,16 +165,19 @@ const app = {
         progressText.classList.add("hidden");
         actionBtn.classList.remove("hidden");
         actionBtn.textContent = "Restart Now";
+        actionBtn.onclick = () => this.installUpdate();
         break;
-        
+
       case "not-available":
-        // Hide banner if no update
         banner.classList.add("hidden");
         break;
-        
+
       case "error":
         banner.classList.remove("hidden");
-        banner.className = banner.className.replace("from-blue-600 to-indigo-600", "from-red-500 to-red-600");
+        banner.className = banner.className.replace(
+          "from-blue-600 to-indigo-600",
+          "from-red-500 to-red-600"
+        );
         icon.textContent = "❌";
         title.textContent = "Update Error";
         message.textContent = data.error || "Failed to check for updates";
@@ -167,6 +185,112 @@ const app = {
         progressText.classList.add("hidden");
         actionBtn.classList.add("hidden");
         break;
+    }
+  },
+
+  showUpdateModal() {
+    if (!this.pendingUpdateInfo) return;
+
+    // Ensure modal HTML exists
+    let modal = document.getElementById("update-modal");
+    if (!modal) {
+      // Inject modal HTML
+      const modalHtml = `
+      <div id="update-modal" class="fixed inset-0 modal-bg z-[100] flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="modal-card rounded-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-300 shadow-2xl border-0">
+          
+          <!-- Header with gradient -->
+          <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 text-9xl leading-none font-bold select-none pointer-events-none">v</div>
+            <h2 class="text-2xl font-bold mb-1 relative z-10">New Update Available!</h2>
+            <p class="text-blue-100 text-sm opacity-90 relative z-10" id="modal-version-text">Version 1.0.0 is ready</p>
+          </div>
+          
+          <!-- Changelog -->
+          <div class="p-6 bg-dark-900">
+            <h3 class="text-xs font-bold text-dark-400 uppercase tracking-widest mb-4">What's New</h3>
+            <div id="modal-changelog" class="prose prose-invert prose-sm max-w-none text-dark-300 overflow-y-auto max-h-[300px] bg-dark-800 p-4 rounded-xl border border-dark-700 leading-relaxed custom-scrollbar">
+              Loading changes...
+            </div>
+          </div>
+          
+          <!-- Actions -->
+          <div class="p-6 bg-dark-900 border-t border-dark-800 flex justify-end gap-3">
+            <button onclick="app.cancelUpdate()" class="px-5 py-2.5 rounded-xl text-sm font-medium text-dark-400 hover:text-white hover:bg-dark-800 transition-colors">
+              Maybe Later
+            </button>
+            <button onclick="app.confirmUpdate()" class="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:brightness-110 transition-all transform active:scale-95">
+              Download & Update 🚀
+            </button>
+          </div>
+        </div>
+      </div>
+      `;
+      document.body.insertAdjacentHTML("beforeend", modalHtml);
+      modal = document.getElementById("update-modal");
+    }
+
+    // Update content
+    const versionText = document.getElementById("modal-version-text");
+    const changelog = document.getElementById("modal-changelog");
+
+    if (versionText)
+      versionText.textContent = `Version ${this.pendingUpdateInfo.version} is ready`;
+    if (changelog) {
+      // Use configured release notes or fallback
+      let notes = this.pendingUpdateInfo.releaseNotes;
+      if (!notes || notes.trim() === "No release notes available.") {
+        // Fallback or "what you did now" if testing locally
+        notes =
+          "• **Log Persistence**: Logs are now saved to disk automatically to prevent data loss.\n" +
+          "• **Performance**: Reduced application lag by optimizing live log rendering.\n" +
+          "• **History**: Added ability to load full historical logs from file.\n" +
+          "• **Cleaner UI**: Improved log controls and status indicators.";
+      }
+
+      // Simple format
+      changelog.innerHTML = notes
+        .replace(/\\n/g, "<br>")
+        .replace(/•/g, '<span class="text-blue-400 mr-2">•</span>');
+    }
+
+    // Show modal
+    modal.classList.remove("hidden");
+    // Trigger animation
+    requestAnimationFrame(() => {
+      modal.classList.remove("opacity-0");
+      modal.querySelector(".modal-card").classList.remove("scale-95");
+      modal.querySelector(".modal-card").classList.add("scale-100");
+    });
+  },
+
+  confirmUpdate() {
+    // Hide modal
+    this.cancelUpdate();
+
+    // Trigger download
+    window.electronAPI.downloadUpdate();
+
+    // Update banner UI to show downloading state immediately (optional, but handled by event usually)
+    const banner = document.getElementById("update-banner");
+    const message = document.getElementById("update-message");
+    if (banner) {
+      banner.classList.remove("hidden");
+      if (message) message.textContent = "Starting download...";
+    }
+  },
+
+  cancelUpdate() {
+    const modal = document.getElementById("update-modal");
+    if (modal) {
+      // Animation out
+      modal.classList.add("opacity-0");
+      modal.querySelector(".modal-card").classList.remove("scale-100");
+      modal.querySelector(".modal-card").classList.add("scale-95");
+
+      setTimeout(() => {
+        modal.classList.add("hidden");
+      }, 300);
     }
   },
 
@@ -193,14 +317,14 @@ const app = {
     "Loading configurations...",
     "Preparing workspace...",
     "Starting engines...",
-    "Almost ready..."
+    "Almost ready...",
   ],
 
   startSplashAnimation() {
     const progressBar = document.getElementById("splash-progress");
     const statusText = document.getElementById("splash-status");
     const splash = document.getElementById("splash-screen");
-    
+
     const splashDuration = 3000; // 3 seconds
     const startTime = Date.now();
     let messageIndex = 0;
@@ -209,14 +333,19 @@ const app = {
     const animateProgress = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min((elapsed / splashDuration) * 100, 100);
-      
+
       if (progressBar) {
         progressBar.style.width = `${progress}%`;
       }
 
       // Update status message at intervals
-      const newMessageIndex = Math.floor((elapsed / splashDuration) * this.splashMessages.length);
-      if (newMessageIndex !== messageIndex && newMessageIndex < this.splashMessages.length) {
+      const newMessageIndex = Math.floor(
+        (elapsed / splashDuration) * this.splashMessages.length
+      );
+      if (
+        newMessageIndex !== messageIndex &&
+        newMessageIndex < this.splashMessages.length
+      ) {
         messageIndex = newMessageIndex;
         if (statusText) {
           statusText.textContent = this.splashMessages[messageIndex];
@@ -293,7 +422,8 @@ const app = {
     const card = document.createElement("div");
     card.id = `service-${service.id}`;
     card.dataset.serviceId = service.id;
-    card.className = "service-card rounded-lg p-4 text-white flex flex-col h-full";
+    card.className =
+      "service-card rounded-lg p-4 text-white flex flex-col h-full";
 
     // Card is NOT draggable by default
     card.draggable = false;
@@ -319,19 +449,27 @@ const app = {
           
           <div class="flex-1 min-w-0">
             <input type="text" value="${service.name}" 
-                   onblur="app.updateService('${service.id}', 'name', this.value)"
+                   onblur="app.updateService('${
+                     service.id
+                   }', 'name', this.value)"
                    class="text-sm font-semibold bg-transparent border-none text-white focus:outline-none px-0 w-full truncate"
                    title="${service.name}">
             <div class="flex items-center gap-2 mt-0.5">
-              <span id="status-${service.id}" class="status-badge ${pulseClass} inline-flex items-center gap-1 px-1.5 py-0.5 border rounded text-[10px] font-medium uppercase ${statusClass}">
+              <span id="status-${
+                service.id
+              }" class="status-badge ${pulseClass} inline-flex items-center gap-1 px-1.5 py-0.5 border rounded text-[10px] font-medium uppercase ${statusClass}">
                 <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
                 ${statusText}
               </span>
-              <span id="pid-${service.id}" class="text-[10px] text-dark-500 font-mono">${pidDisplay}</span>
+              <span id="pid-${
+                service.id
+              }" class="text-[10px] text-dark-500 font-mono">${pidDisplay}</span>
             </div>
           </div>
         </div>
-        <button onclick="app.toggleExpand('${service.id}')" id="expand-icon-${service.id}" class="p-1 hover:bg-dark-700 rounded text-dark-400 hover:text-white">
+        <button onclick="app.toggleExpand('${service.id}')" id="expand-icon-${
+      service.id
+    }" class="p-1 hover:bg-dark-700 rounded text-dark-400 hover:text-white">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
@@ -342,7 +480,9 @@ const app = {
         <div>
           <label class="text-[10px] text-dark-500 uppercase font-medium mb-1 block">Path</label>
           <select id="path-select-${service.id}" 
-                  onchange="app.updateService('${service.id}', 'path', this.value)"
+                  onchange="app.updateService('${
+                    service.id
+                  }', 'path', this.value)"
                   class="input-field w-full px-2 py-1.5 rounded bg-dark-900 text-dark-300 border border-dark-700 text-xs">
             <option value="${service.path}">${service.path}</option>
           </select>
@@ -350,53 +490,83 @@ const app = {
         <div>
           <label class="text-[10px] text-dark-500 uppercase font-medium mb-1 block">Command</label>
           <input type="text" value="${service.command}"
-                 onblur="app.updateService('${service.id}', 'command', this.value)"
+                 onblur="app.updateService('${
+                   service.id
+                 }', 'command', this.value)"
                  class="input-field w-full px-2 py-1.5 rounded bg-dark-900 text-dark-300 border border-dark-700 text-xs font-mono">
         </div>
       </div>
       
       <div class="flex gap-1.5 mb-3">
-        <button onclick="app.start('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium">
+        <button onclick="app.start('${
+          service.id
+        }')" class="btn flex-1 px-2 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium">
           ▶ Start
         </button>
-        <button onclick="app.stop('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium">
+        <button onclick="app.stop('${
+          service.id
+        }')" class="btn flex-1 px-2 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium">
           ■ Stop
         </button>
-        <button onclick="app.restart('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium">
+        <button onclick="app.restart('${
+          service.id
+        }')" class="btn flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium">
           ↻ Restart
         </button>
-        <button onclick="app.remove('${service.id}')" class="btn px-2 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-400 hover:text-white rounded text-xs">
+        <button onclick="app.remove('${
+          service.id
+        }')" class="btn px-2 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-400 hover:text-white rounded text-xs">
           🗑
         </button>
       </div>
 
       <!-- Git Pull + Toggle Logs -->
       <div class="flex gap-1.5 mb-3">
-        <button onclick="app.gitPullService('${service.id}')" class="btn flex-1 px-2 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-medium flex items-center justify-center gap-1.5">
+        <button onclick="app.gitPullService('${
+          service.id
+        }')" class="btn flex-1 px-2 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-medium flex items-center justify-center gap-1.5">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Git Pull
         </button>
-        <button onclick="app.toggleServiceLog('${service.id}')" id="toggle-log-btn-${service.id}" class="btn px-2 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-300 hover:text-white rounded text-xs flex items-center gap-1">
-          <span id="toggle-log-icon-${service.id}">${this.logsVisible ? '📋' : '📄'}</span>
-          <span id="toggle-log-text-${service.id}">${this.logsVisible ? 'Hide' : 'Show'}</span>
+        <button onclick="app.toggleServiceLog('${
+          service.id
+        }')" id="toggle-log-btn-${
+      service.id
+    }" class="btn px-2 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-300 hover:text-white rounded text-xs flex items-center gap-1">
+          <span id="toggle-log-icon-${service.id}">${
+      this.logsVisible ? "📋" : "📄"
+    }</span>
+          <span id="toggle-log-text-${service.id}">${
+      this.logsVisible ? "Hide" : "Show"
+    }</span>
         </button>
       </div>
       
       <!-- Terminal (hidden by default) -->
-      <div class="rounded overflow-hidden border border-dark-700 flex flex-col bg-dark-950" style="height: 200px; ${this.logsVisible ? '' : 'display: none;'}" id="terminal-container-${service.id}">
+      <div class="rounded overflow-hidden border border-dark-700 flex flex-col bg-dark-950" style="height: 200px; ${
+        this.logsVisible ? "" : "display: none;"
+      }" id="terminal-container-${service.id}">
         <div class="bg-dark-800 px-2 py-1.5 flex items-center justify-between border-b border-dark-700">
           <div class="flex items-center gap-2">
             <span class="text-[10px] text-dark-500">Branch:</span>
-            <span id="git-branch-${service.id}" class="text-[10px] font-mono text-blue-400">Loading...</span>
+            <span id="git-branch-${
+              service.id
+            }" class="text-[10px] font-mono text-blue-400">Loading...</span>
           </div>
-          <button onclick="app.clearLog('${service.id}')" class="text-[10px] text-dark-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-dark-700">Clear</button>
+          <button onclick="app.clearLog('${
+            service.id
+          }')" class="text-[10px] text-dark-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-dark-700">Clear</button>
         </div>
         
         <div class="log-container flex-1 p-2 overflow-y-auto text-xs" 
              id="log-${service.id}" 
-             style="font-family: ${this.logSettings.fontFamily}; font-size: ${this.logSettings.fontSize}px; color: ${this.logSettings.textColor}; background-color: ${this.logSettings.bgColor};">
+             style="font-family: ${this.logSettings.fontFamily}; font-size: ${
+      this.logSettings.fontSize
+    }px; color: ${this.logSettings.textColor}; background-color: ${
+      this.logSettings.bgColor
+    };">
 > Ready
 </div>
         
@@ -407,7 +577,9 @@ const app = {
                    id="command-input-${service.id}"
                    placeholder="Enter command..."
                    class="flex-1 bg-transparent border-none text-white text-xs focus:outline-none p-0 font-mono"
-                   onkeypress="if(event.key === 'Enter') app.executeCommand('${service.id}')">
+                   onkeypress="if(event.key === 'Enter') app.executeCommand('${
+                     service.id
+                   }')">
           </div>
         </div>
       </div>
@@ -434,7 +606,11 @@ const app = {
     const logElement = document.getElementById(`log-${service.id}`);
     if (logElement) {
       logElement.addEventListener("scroll", () => {
-        const isNearBottom = logElement.scrollHeight - logElement.scrollTop - logElement.clientHeight < 50;
+        const isNearBottom =
+          logElement.scrollHeight -
+            logElement.scrollTop -
+            logElement.clientHeight <
+          50;
         if (isNearBottom) {
           this.hideNewLogsIndicator(service.id);
         }
@@ -547,7 +723,7 @@ const app = {
       this.logBuffer[id] = [];
     }
     this.logBuffer[id].push(log);
-    
+
     // Schedule flush if not already scheduled
     if (!this.logFlushTimer) {
       this.logFlushTimer = setTimeout(() => {
@@ -560,30 +736,34 @@ const app = {
   // Flush all buffered logs to DOM
   flushLogs() {
     requestAnimationFrame(() => {
-      Object.keys(this.logBuffer).forEach(id => {
+      Object.keys(this.logBuffer).forEach((id) => {
         const logs = this.logBuffer[id];
         if (!logs || logs.length === 0) return;
-        
+
         const logElement = document.getElementById(`log-${id}`);
         const terminal = document.getElementById(`terminal-container-${id}`);
-        
+
         // Skip if terminal is hidden (huge performance gain)
         if (terminal && terminal.style.display === "none") {
           this.logBuffer[id] = []; // Clear buffer but don't render
           return;
         }
-        
+
         if (logElement) {
           // Batch all logs into one text node
-          const combinedLog = logs.map(l => this.stripAnsiCodes(l)).join('');
+          const combinedLog = logs.map((l) => this.stripAnsiCodes(l)).join("");
           const span = document.createElement("span");
           span.textContent = combinedLog;
-          
-          const isNearBottom = logElement.scrollHeight - logElement.scrollTop - logElement.clientHeight < 50;
-          
+
+          const isNearBottom =
+            logElement.scrollHeight -
+              logElement.scrollTop -
+              logElement.clientHeight <
+            50;
+
           logElement.appendChild(span);
           this.trimLogIfNeeded(logElement);
-          
+
           if (isNearBottom) {
             logElement.scrollTop = logElement.scrollHeight;
             this.hideNewLogsIndicator(id);
@@ -591,7 +771,7 @@ const app = {
             this.showNewLogsIndicator(id);
           }
         }
-        
+
         // Clear buffer for this service
         this.logBuffer[id] = [];
       });
@@ -602,7 +782,7 @@ const app = {
   trimLogIfNeeded(logElement) {
     const maxLines = this.logSettings.maxLogLines || 1000;
     const children = logElement.children;
-    
+
     // Remove oldest entries if we exceed max
     while (children.length > maxLines) {
       logElement.removeChild(children[0]);
@@ -611,7 +791,9 @@ const app = {
 
   // Show indicator that new logs are available
   showNewLogsIndicator(id) {
-    const terminalContainer = document.getElementById(`terminal-container-${id}`);
+    const terminalContainer = document.getElementById(
+      `terminal-container-${id}`
+    );
     if (!terminalContainer) return;
 
     // Check if indicator already exists
@@ -619,10 +801,11 @@ const app = {
     if (!indicator) {
       indicator = document.createElement("button");
       indicator.id = `new-logs-${id}`;
-      indicator.className = "new-logs-indicator absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1 rounded-full shadow-lg transition-all z-10";
+      indicator.className =
+        "new-logs-indicator absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1 rounded-full shadow-lg transition-all z-10";
       indicator.textContent = "↓ New logs";
       indicator.onclick = () => this.scrollToBottom(id);
-      
+
       // Make terminal container relative for positioning
       terminalContainer.style.position = "relative";
       terminalContainer.appendChild(indicator);
@@ -646,11 +829,40 @@ const app = {
     this.hideNewLogsIndicator(id);
   },
 
+  async loadServiceLogs(id) {
+    const logElement = document.getElementById(`log-${id}`);
+    if (logElement) {
+      // Save current scroll position? No, we likely want to see the end.
+      logElement.innerHTML = "> Loading logs from file...\n";
+      try {
+        const logs = await window.electronAPI.getServiceLogs(id);
+        const cleanLogs = this.stripAnsiCodes(logs);
+        const span = document.createElement("span");
+        span.textContent = cleanLogs;
+        logElement.innerHTML = ""; // Clear "Loading..."
+        logElement.appendChild(span);
+
+        // Scroll to bottom
+        requestAnimationFrame(() => {
+          logElement.scrollTop = logElement.scrollHeight;
+        });
+      } catch (e) {
+        logElement.innerHTML += `\nError loading logs: ${e.message}\n`;
+      }
+    }
+  },
+
   clearLog(id) {
     const logElement = document.getElementById(`log-${id}`);
     if (logElement) {
-      logElement.innerHTML = "> Cleared\n";
+      logElement.innerHTML = "> Logs Cleared (File Truncated)\n";
     }
+    // Clear buffer
+    if (this.logBuffer[id]) {
+      this.logBuffer[id] = [];
+    }
+    // Call IPC to clear file
+    window.electronAPI.clearServiceLogs(id);
   },
 
   // Remove service card
@@ -715,7 +927,8 @@ const app = {
     console.log("Git Pull Service:", id);
     const output = document.getElementById(`log-${id}`);
     if (output) {
-      const isNearBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
+      const isNearBottom =
+        output.scrollHeight - output.scrollTop - output.clientHeight < 50;
       output.innerHTML += `\n> Executing: git pull\n`;
       if (isNearBottom) output.scrollTop = output.scrollHeight;
     }
@@ -723,7 +936,8 @@ const app = {
     const result = await window.electronAPI.executeCommand(id, "git pull");
 
     if (output) {
-      const isNearBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
+      const isNearBottom =
+        output.scrollHeight - output.scrollTop - output.clientHeight < 50;
       if (result.success) {
         output.innerHTML += result.output + "\n";
       } else {
@@ -743,7 +957,8 @@ const app = {
     const command = input.value.trim();
     if (!command) return;
 
-    const isNearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 50;
+    const isNearBottom =
+      log.scrollHeight - log.scrollTop - log.clientHeight < 50;
     log.innerHTML += `\n> ${command}\n`;
     const result = await window.electronAPI.executeCommand(serviceId, command);
 
@@ -752,7 +967,7 @@ const app = {
     } else {
       log.innerHTML += "Error: " + result.output + "\n";
     }
-    
+
     if (isNearBottom) {
       log.scrollTop = log.scrollHeight;
     } else {
@@ -764,21 +979,27 @@ const app = {
   // Toggle all logs visibility
   toggleAllLogs() {
     this.logsVisible = !this.logsVisible;
-    
+
     // Update button text
     const btnText = document.getElementById("toggle-all-logs-text");
     if (btnText) {
-      btnText.textContent = this.logsVisible ? "Hide All Logs" : "Show All Logs";
+      btnText.textContent = this.logsVisible
+        ? "Hide All Logs"
+        : "Show All Logs";
     }
-    
+
     // Toggle all service terminals
-    Object.keys(this.services).forEach(id => {
+    Object.keys(this.services).forEach((id) => {
       const terminal = document.getElementById(`terminal-container-${id}`);
       const icon = document.getElementById(`toggle-log-icon-${id}`);
       const text = document.getElementById(`toggle-log-text-${id}`);
-      
+
       if (terminal) {
         terminal.style.display = this.logsVisible ? "flex" : "none";
+        // If showing logs, load from file
+        if (this.logsVisible) {
+          requestAnimationFrame(() => this.loadServiceLogs(id));
+        }
       }
       if (icon) {
         icon.textContent = this.logsVisible ? "📋" : "📄";
@@ -794,11 +1015,16 @@ const app = {
     const terminal = document.getElementById(`terminal-container-${id}`);
     const icon = document.getElementById(`toggle-log-icon-${id}`);
     const text = document.getElementById(`toggle-log-text-${id}`);
-    
+
     if (terminal) {
       const isVisible = terminal.style.display !== "none";
       terminal.style.display = isVisible ? "none" : "flex";
-      
+
+      // If we just showed it, load the logs from file
+      if (!isVisible) {
+        this.loadServiceLogs(id);
+      }
+
       if (icon) {
         icon.textContent = isVisible ? "📄" : "📋";
       }
@@ -810,17 +1036,20 @@ const app = {
 
   // Clear all logs for all services
   clearAllLogs() {
-    Object.keys(this.services).forEach(id => {
+    Object.keys(this.services).forEach((id) => {
+      // Clear UI
       const logElement = document.getElementById(`log-${id}`);
       if (logElement) {
-        logElement.innerHTML = "> Logs cleared\n";
+        logElement.innerHTML = "> Logs Cleared (File Truncated)\n";
       }
-      // Also clear any buffered logs
+      // Clear buffer
       if (this.logBuffer[id]) {
         this.logBuffer[id] = [];
       }
+      // Call IPC to clear file
+      window.electronAPI.clearServiceLogs(id);
     });
-    console.log("All logs cleared");
+    console.log("All logs cleared and files truncated");
   },
 
   // Add new service
@@ -1198,6 +1427,11 @@ const app = {
       this.logSettings = { ...this.logSettings, ...JSON.parse(saved) };
     }
 
+    // Send max lines to main process
+    window.electronAPI.send("update-log-config", {
+      maxLogLines: this.logSettings.maxLogLines,
+    });
+
     // Update UI controls
     const fontSizeInput = document.getElementById("log-font-size");
     if (fontSizeInput) fontSizeInput.value = this.logSettings.fontSize;
@@ -1217,8 +1451,7 @@ const app = {
     if (maxLinesInput) maxLinesInput.value = this.logSettings.maxLogLines;
 
     const maxLinesValue = document.getElementById("max-lines-value");
-    if (maxLinesValue)
-      maxLinesValue.textContent = this.logSettings.maxLogLines;
+    if (maxLinesValue) maxLinesValue.textContent = this.logSettings.maxLogLines;
 
     const fontFamilyInput = document.getElementById("log-font-family");
     if (fontFamilyInput) fontFamilyInput.value = this.logSettings.fontFamily;
@@ -1257,6 +1490,11 @@ const app = {
     // Save to localStorage
     localStorage.setItem("logSettings", JSON.stringify(this.logSettings));
 
+    // Send max lines to main process
+    window.electronAPI.send("update-log-config", {
+      maxLogLines: this.logSettings.maxLogLines,
+    });
+
     // Apply to all log containers
     document.querySelectorAll(".log-container").forEach((log) => {
       log.style.fontFamily = this.logSettings.fontFamily;
@@ -1293,10 +1531,12 @@ const app = {
     document.getElementById("log-font-size").value = this.logSettings.fontSize;
     document.getElementById("font-size-value").textContent =
       this.logSettings.fontSize + "px";
-    document.getElementById("log-height").value = this.logSettings.expandedHeight;
+    document.getElementById("log-height").value =
+      this.logSettings.expandedHeight;
     document.getElementById("log-height-value").textContent =
       this.logSettings.expandedHeight + "px";
-    document.getElementById("log-max-lines").value = this.logSettings.maxLogLines;
+    document.getElementById("log-max-lines").value =
+      this.logSettings.maxLogLines;
     document.getElementById("max-lines-value").textContent =
       this.logSettings.maxLogLines;
     document.getElementById("log-font-family").value =

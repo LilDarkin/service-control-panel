@@ -40,6 +40,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   executeCommand: (serviceId, command) =>
     ipcRenderer.invoke("execute-command", serviceId, command),
   getGitBranch: (serviceId) => ipcRenderer.invoke("get-git-branch", serviceId),
+  getServiceLogs: (serviceId) =>
+    ipcRenderer.invoke("get-service-logs", serviceId),
+  clearServiceLogs: (serviceId) =>
+    ipcRenderer.send("clear-service-logs", serviceId),
 
   // Generic send method for other IPC communications
   send: (channel, ...args) => ipcRenderer.send(channel, ...args),
@@ -60,6 +64,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onUpdateStatus: (callback) =>
     ipcRenderer.on("update-status", (event, data) => callback(data)),
   installUpdate: () => ipcRenderer.send("install-update"),
+  downloadUpdate: () => ipcRenderer.send("download-update"),
 });
 
 console.log("Preload script loaded");

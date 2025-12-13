@@ -7,17 +7,21 @@ A lightweight Electron-based control panel for managing multiple local microserv
 Before using this application, make sure you have the following installed:
 
 ### Required
+
 - **Node.js** (v16 or higher) - [Download](https://nodejs.org/)
 - **npm** (comes with Node.js)
 
 ### Recommended
+
 - **Git for Windows** with Git Bash - [Download](https://git-scm.com/download/win)
   - The app uses Git Bash as the default shell for running commands
   - Git Bash provides better Unix-like command support (e.g., `npm`, `node`, `yarn`)
   - If Git Bash is not found, the app falls back to PowerShell
 
 ### Shell Detection
+
 The app automatically searches for Git Bash in these locations:
+
 - `C:\Program Files\Git\bin\bash.exe`
 - `C:\Program Files (x86)\Git\bin\bash.exe`
 
@@ -31,8 +35,11 @@ If Git Bash is not installed, the app will use PowerShell instead.
 - **Git Integration**: Pull latest changes for individual services or all at once
 - **Drag & Drop Reorder**: Organize your service cards by dragging
 - **Customizable Terminal**: Adjust font size, family, colors, and log height
-- **Lightweight UI**: Optimized for performance on all hardware
-- **Log Management**: Automatic log trimming (max 500 lines) to prevent memory issues
+- **Modern UI**: Polished interface with dark mode and smooth animations
+- **Log Persistence**: Logs are automatically saved to `.log` files in `%APPDATA%`
+- **Smart History**: View full log history on demand without impacting performance
+- **Resource Efficient**: Terminal buffers are limited to reduce memory usage, while files capture everything
+- **Safe Updates**: Manual update control with changelog previews before downloading
 
 ## Installation
 
@@ -54,10 +61,20 @@ npm start
 
 - **Start/Stop/Restart**: Click the respective buttons on each service card
 - **Expand Logs**: Click the chevron icon to expand the terminal view
+- **Show/Hide Logs**: Toggle logs for specific services; showing logs automatically loads the full history from file
+- **Clear Logs**: Wipes the terminal screen AND effectively truncates the log file
 - **Global Controls**: Use sidebar buttons to control all services at once
 - **Add Service**: Click "Add Service" and select a folder from your parent directory
 - **Edit Config**: Modify the path or command directly in the input fields
 - **Git Pull**: Pull latest changes for a single service or all services
+
+### Log Management
+
+- **Automatic Saving**: Every output line is saved to a persistent `.log` file in the user data folder `logs/` directory.
+- **On-Demand History**: The "Show" button loads the full history (up to 5MB) from disk, so you never miss a log even if the terminal was hidden.
+- **Performance Settings**:
+  - **Max Log Lines**: Controls how many lines are kept in the DOM to prevent lag (default: 350).
+  - **Smart Truncation**: When a service restarts, the file is automatically trimmed to this limit to keep disk usage healthy.
 
 ### Using Profiles
 
@@ -84,12 +101,12 @@ npm start
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Service won't start | Check logs for errors, verify the path exists |
-| Commands not found | Install Git Bash for better shell support |
-| App freezes | Logs are auto-trimmed, but restart if needed |
-| Process still running after exit | App force-terminates processes on quit |
+| Issue                            | Solution                                      |
+| -------------------------------- | --------------------------------------------- |
+| Service won't start              | Check logs for errors, verify the path exists |
+| Commands not found               | Install Git Bash for better shell support     |
+| App freezes                      | Logs are auto-trimmed, but restart if needed  |
+| Process still running after exit | App force-terminates processes on quit        |
 
 ## Building
 

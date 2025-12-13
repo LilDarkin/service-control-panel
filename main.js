@@ -8,7 +8,7 @@ let autoUpdater = null;
 if (app.isPackaged) {
   const { autoUpdater: updater } = require("electron-updater");
   autoUpdater = updater;
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false; // Disable auto download
   autoUpdater.autoInstallOnAppQuit = true;
 }
 
@@ -16,7 +16,9 @@ let mainWindow;
 const services = {};
 const configPath = path.join(app.getPath("userData"), "services.json");
 const profilesDir = path.join(app.getPath("userData"), "profiles");
+const logsDir = path.join(app.getPath("userData"), "logs");
 let currentProfile = "default";
+let maxLogLines = 350; // Default limit
 
 // Log throttling to prevent IPC flooding
 const logBuffer = {};
@@ -27,7 +29,7 @@ function sendBufferedLog(id, log) {
     logBuffer[id] = [];
   }
   logBuffer[id].push(log);
-  
+
   // Schedule flush if not already scheduled
   if (!logFlushTimer) {
     logFlushTimer = setTimeout(() => {
@@ -38,22 +40,52 @@ function sendBufferedLog(id, log) {
 }
 
 function flushLogBuffer() {
-  Object.keys(logBuffer).forEach(id => {
+  Object.keys(logBuffer).forEach((id) => {
     const logs = logBuffer[id];
     if (logs && logs.length > 0 && mainWindow) {
       // Send combined logs as one message
-      mainWindow.webContents.send("service-log", { 
-        id, 
-        log: logs.join('') 
+      mainWindow.webContents.send("service-log", {
+        id,
+        log: logs.join(""),
       });
       logBuffer[id] = [];
     }
   });
 }
 
-// Ensure profiles directory exists
 if (!fs.existsSync(profilesDir)) {
   fs.mkdirSync(profilesDir, { recursive: true });
+}
+
+// Ensure logs directory exists
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+// Helper to enforce log file line limit
+function enforceLogLimit(filePath, maxLines) {
+  try {
+    if (!fs.existsSync(filePath)) return;
+
+    const content = fs.readFileSync(filePath, "utf8");
+    const lines = content.split("\n");
+
+    if (lines.length > maxLines) {
+      const truncatedLines = lines.slice(lines.length - maxLines);
+      const newContent = truncatedLines.join("\n");
+      fs.writeFileSync(filePath, newContent);
+      console.log(
+        `Truncated log file ${path.basename(filePath)} to ${maxLines} lines`
+      );
+    }
+  } catch (error) {
+    console.error(`Error truncating log file ${filePath}:`, error);
+  }
+}
+
+function cleanLogFile(id) {
+  const logPath = path.join(logsDir, `${id}.log`);
+  enforceLogLimit(logPath, maxLogLines);
 }
 
 // Try to find Git Bash
@@ -144,8 +176,22 @@ function startService(id) {
       shell: process.platform === "win32" ? "cmd.exe" : true,
     });
 
+    // Clean logs before starting (ensure we start within limits)
+    cleanLogFile(id);
+
+    // Create log stream
+    const logPath = path.join(logsDir, `${id}.log`);
+    const logStream = fs.createWriteStream(logPath, { flags: "a" });
+
+    // Add timestamp to new session
+    logStream.write(
+      `\n--- Session started at ${new Date().toISOString()} ---\n`
+    );
+
     service.status = "running";
     service.pid = service.process.pid;
+    service.logStream = logStream; // Store stream to close it later
+
     mainWindow.webContents.send("service-status", {
       id,
       status: "running",
@@ -154,15 +200,31 @@ function startService(id) {
     console.log(`Started service ${id}, PID: ${service.process.pid}`);
 
     service.process.stdout.on("data", (data) => {
+      logStream.write(data);
       sendBufferedLog(id, data.toString());
     });
 
     service.process.stderr.on("data", (data) => {
+      logStream.write(data);
       sendBufferedLog(id, data.toString());
     });
 
     service.process.on("close", (code) => {
       console.log(`Service ${id} stopped with code ${code}`);
+
+      // Close log stream
+      if (service.logStream) {
+        service.logStream.write(
+          `\n--- Session ended at ${new Date().toISOString()} with code ${code} ---\n`
+        );
+        service.logStream.end(() => {
+          service.logStream = null;
+          cleanLogFile(id);
+        });
+      } else {
+        cleanLogFile(id);
+      }
+
       service.process = null;
       service.pid = null;
       service.status = "stopped";
@@ -181,6 +243,13 @@ function startService(id) {
 
     service.process.on("error", (error) => {
       console.error(`Error starting service ${id}:`, error);
+
+      if (service.logStream) {
+        service.logStream.write(`ERROR: ${error.message}\n`);
+        service.logStream.end();
+        service.logStream = null;
+      }
+
       mainWindow.webContents.send("service-log", {
         id,
         log: `ERROR: ${error.message}\n`,
@@ -292,9 +361,15 @@ app.whenReady().then(() => {
 
     autoUpdater.on("update-available", (info) => {
       console.log("Update available:", info.version);
-      mainWindow.webContents.send("update-status", { 
-        status: "available", 
-        version: info.version 
+      // The release notes might be a string or array, handle accordingly
+      const releaseNotes = Array.isArray(info.releaseNotes)
+        ? info.releaseNotes.map((n) => n.note).join("\n")
+        : info.releaseNotes || "No release notes available.";
+
+      mainWindow.webContents.send("update-status", {
+        status: "available",
+        version: info.version,
+        releaseNotes: releaseNotes,
       });
     });
 
@@ -304,24 +379,27 @@ app.whenReady().then(() => {
     });
 
     autoUpdater.on("download-progress", (progress) => {
-      mainWindow.webContents.send("update-status", { 
-        status: "downloading", 
-        percent: Math.round(progress.percent) 
+      mainWindow.webContents.send("update-status", {
+        status: "downloading",
+        percent: Math.round(progress.percent),
       });
     });
 
     autoUpdater.on("update-downloaded", (info) => {
       console.log("Update downloaded:", info.version);
-      mainWindow.webContents.send("update-status", { 
-        status: "downloaded", 
-        version: info.version 
+      mainWindow.webContents.send("update-status", {
+        status: "downloaded",
+        version: info.version,
       });
       // UI banner will handle user interaction
     });
 
     autoUpdater.on("error", (err) => {
       console.error("Update error:", err);
-      mainWindow.webContents.send("update-status", { status: "error", error: err.message });
+      mainWindow.webContents.send("update-status", {
+        status: "error",
+        error: err.message,
+      });
     });
 
     // Check for updates after a short delay
@@ -335,6 +413,13 @@ app.whenReady().then(() => {
 ipcMain.on("install-update", () => {
   if (autoUpdater) {
     autoUpdater.quitAndInstall();
+  }
+});
+
+// Handle download update request
+ipcMain.on("download-update", () => {
+  if (autoUpdater) {
+    autoUpdater.downloadUpdate();
   }
 });
 
@@ -501,7 +586,10 @@ ipcMain.handle("get-subfolders", async (event, parentPath) => {
       .map((item) => ({
         name: item.name,
         path: path.join(parentPath, item.name),
-        relativePath: path.relative(__dirname, path.join(parentPath, item.name)),
+        relativePath: path.relative(
+          __dirname,
+          path.join(parentPath, item.name)
+        ),
       }));
   } catch (error) {
     console.error("Error reading subfolders:", error);
@@ -598,6 +686,65 @@ ipcMain.handle("get-profiles", () => {
       .map((f) => f.replace(".json", ""));
   } catch (error) {
     return ["default"];
+  }
+});
+
+// Get service logs
+ipcMain.handle("get-service-logs", async (event, serviceId) => {
+  try {
+    const logPath = path.join(logsDir, `${serviceId}.log`);
+    if (fs.existsSync(logPath)) {
+      // Read the file. If it's too large, we might want to truncate or stream,
+      // but for now let's read the last 100KB to ensure UI responsiveness.
+      // Or reading the whole file if requested.
+      // Let's read the whole file for now as requested "fetch the logs of that file".
+      // But adding a safety limit of 5MB.
+
+      const stats = fs.statSync(logPath);
+      if (stats.size > 5 * 1024 * 1024) {
+        // Read last 5MB
+        const buffer = Buffer.alloc(5 * 1024 * 1024);
+        const fd = fs.openSync(logPath, "r");
+        fs.readSync(fd, buffer, 0, buffer.length, stats.size - buffer.length);
+        fs.closeSync(fd);
+        return "--- Log truncated (showing last 5MB) ---\n" + buffer.toString();
+      } else {
+        return fs.readFileSync(logPath, "utf8");
+      }
+    }
+    return "No logs found.";
+  } catch (error) {
+    console.error("Error reading logs:", error);
+    return `Error reading logs: ${error.message}`;
+  }
+});
+
+// Clear service logs
+ipcMain.on("clear-service-logs", (event, serviceId) => {
+  try {
+    const logPath = path.join(logsDir, `${serviceId}.log`);
+    if (fs.existsSync(logPath)) {
+      // Truncate the file to empty it
+      fs.truncateSync(logPath, 0);
+
+      // If the service is running, we should also write a marker
+      const service = services[serviceId];
+      if (service && service.logStream) {
+        service.logStream.write(
+          `\n--- Logs cleared at ${new Date().toISOString()} ---\n`
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error clearing logs:", error);
+  }
+});
+
+// Update log configuration
+ipcMain.on("update-log-config", (event, config) => {
+  if (config && config.maxLogLines) {
+    maxLogLines = config.maxLogLines;
+    console.log("Updated max log lines to:", maxLogLines);
   }
 });
 
